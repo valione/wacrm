@@ -1509,6 +1509,27 @@
       "templatesUnavailable": "Modelos não estão disponíveis para este provedor",
       "templatesUnavailableHint": "Modelos de mensagem são um recurso da Cloud API da Meta. Troque para o provedor API Oficial da Meta em Configurações → WhatsApp para gerenciar modelos."
     },
+    "uazapi": {
+      "providerUazapi": "Uazapi — QR Code",
+      "providerUazapiHint": "Serviço na nuvem; escaneie com o celular",
+      "connect": "Conectar via QR Code",
+      "connecting": "Iniciando sessão…",
+      "scanTitle": "Escaneie o QR Code",
+      "scanHint": "WhatsApp → Configurações → Aparelhos conectados → Conectar aparelho",
+      "qrExpiredHint": "O código é renovado automaticamente enquanto você aguarda.",
+      "connectedAs": "Conectado como {phone}",
+      "disconnect": "Desconectar",
+      "disconnecting": "Desconectando…",
+      "disconnectConfirm": "Desconectar este número? Conversas e contatos são preservados.",
+      "disconnectFailed": "Não foi possível desconectar. Verifique o servidor Uazapi e tente novamente.",
+      "sessionDown": "A sessão não está ativa — reconecte pelo QR Code.",
+      "serverUnreachable": "Servidor Uazapi inacessível — verifique as variáveis UAZAPI_*.",
+      "tryAgain": "Servidor Uazapi indisponível — tente novamente.",
+      "switchBlocked": "Desconecte o provedor atual antes de trocar.",
+      "banWarning": "Conexão não oficial: o WhatsApp pode banir números que disparam mensagens em massa não solicitadas. Use com responsabilidade.",
+      "connectError": "Não foi possível iniciar a sessão. Verifique o servidor Uazapi e tente novamente.",
+      "loadingQr": "Carregando QR Code…"
+    },
     "sections": {
       "overview": "Visão geral",
       "profile": "Seu perfil",

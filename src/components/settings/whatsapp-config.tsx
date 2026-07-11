@@ -25,6 +25,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { SettingsPanelHead } from './settings-panel-head';
 import { WhatsAppWahaConfig } from './whatsapp-waha-config';
+import { WhatsAppUazapiConfig } from './whatsapp-uazapi-config';
 import {
   Accordion,
   AccordionItem,
@@ -38,7 +39,7 @@ const MASKED_TOKEN = '••••••••••••••••';
 
 type ConnectionStatus = 'connected' | 'disconnected' | 'unknown';
 type ResetReason = 'token_corrupted' | 'meta_api_error' | null;
-type Provider = 'meta' | 'waha';
+type Provider = 'meta' | 'waha' | 'uazapi';
 
 /**
  * One of the two clickable provider cards in the selector. Native
@@ -91,6 +92,7 @@ function ProviderCard({
 export function WhatsAppConfig() {
   const t = useTranslations('Settings.whatsapp');
   const tw = useTranslations('Settings.waha');
+  const tu = useTranslations('Settings.uazapi');
   const supabase = createClient();
   // After multi-user, whatsapp_config is one-row-per-account, not
   // one-row-per-user. We pull `accountId` straight off the auth
@@ -115,6 +117,7 @@ export function WhatsAppConfig() {
   // silently switched out from under itself. `selectedProvider` is the
   // active tab, initialised from the saved provider.
   const [wahaAvailable, setWahaAvailable] = useState(false);
+  const [uazapiAvailable, setUazapiAvailable] = useState(false);
   const [savedProvider, setSavedProvider] = useState<Provider | null>(null);
   const [selectedProvider, setSelectedProvider] = useState<Provider>('meta');
   // Guards against re-hydrating the form when the load effect below
@@ -204,6 +207,7 @@ export function WhatsAppConfig() {
         const payload = await res.json();
 
         setWahaAvailable(Boolean(payload.waha_available));
+        setUazapiAvailable(Boolean(payload.uazapi_available));
         const prov = (payload.provider as Provider | null) ?? null;
         setSavedProvider(prov);
         setSelectedProvider(prov ?? 'meta');
@@ -471,38 +475,56 @@ export function WhatsAppConfig() {
         description={t("description")}
       />
 
-      {/* Provider selector — only when the WAHA backend is available.
-          A saved config on one provider locks the opposite card. */}
-      {wahaAvailable && (
+      {/* Provider selector — only when at least one QR backend is
+          available. A saved config on one provider locks every other
+          card so a connected number can't be switched out from under
+          itself; `savedProvider && savedProvider !== <card>` reads
+          cleanly now that there are three options. */}
+      {(wahaAvailable || uazapiAvailable) && (
         <div className="mb-6">
           <h3 className="mb-3 text-sm font-medium text-foreground">
             {tw('providerTitle')}
           </h3>
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <ProviderCard
               active={selectedProvider === 'meta'}
-              disabled={savedProvider === 'waha'}
+              disabled={savedProvider !== null && savedProvider !== 'meta'}
               disabledHint={tw('switchBlocked')}
               icon={<Zap className="size-4 text-primary" />}
               title={tw('providerMeta')}
               hint={tw('providerMetaHint')}
               onClick={() => setSelectedProvider('meta')}
             />
-            <ProviderCard
-              active={selectedProvider === 'waha'}
-              disabled={savedProvider === 'meta'}
-              disabledHint={tw('switchBlocked')}
-              icon={<QrCode className="size-4 text-primary" />}
-              title={tw('providerWaha')}
-              hint={tw('providerWahaHint')}
-              onClick={() => setSelectedProvider('waha')}
-            />
+            {wahaAvailable && (
+              <ProviderCard
+                active={selectedProvider === 'waha'}
+                disabled={savedProvider !== null && savedProvider !== 'waha'}
+                disabledHint={tw('switchBlocked')}
+                icon={<QrCode className="size-4 text-primary" />}
+                title={tw('providerWaha')}
+                hint={tw('providerWahaHint')}
+                onClick={() => setSelectedProvider('waha')}
+              />
+            )}
+            {uazapiAvailable && (
+              <ProviderCard
+                active={selectedProvider === 'uazapi'}
+                disabled={savedProvider !== null && savedProvider !== 'uazapi'}
+                disabledHint={tu('switchBlocked')}
+                icon={<QrCode className="size-4 text-primary" />}
+                title={tu('providerUazapi')}
+                hint={tu('providerUazapiHint')}
+                onClick={() => setSelectedProvider('uazapi')}
+              />
+            )}
           </div>
         </div>
       )}
 
       {selectedProvider === 'waha' ? (
         <WhatsAppWahaConfig onChanged={reloadStatus} />
+      ) : selectedProvider === 'uazapi' ? (
+        <WhatsAppUazapiConfig onChanged={reloadStatus} />
       ) : (
       <div className="grid gap-6 lg:grid-cols-[1fr_380px]">
       {/* Main config form */}

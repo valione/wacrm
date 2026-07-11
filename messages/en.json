@@ -1519,6 +1519,27 @@
       "templatesUnavailable": "Templates are not available for this provider",
       "templatesUnavailableHint": "Message templates are a Meta Cloud API feature. Switch to the Meta Official API provider under Settings → WhatsApp to manage templates."
     },
+    "uazapi": {
+      "providerUazapi": "Uazapi — QR Code",
+      "providerUazapiHint": "Cloud service; scan with your phone",
+      "connect": "Connect via QR Code",
+      "connecting": "Starting session…",
+      "scanTitle": "Scan the QR Code",
+      "scanHint": "WhatsApp → Settings → Linked devices → Link a device",
+      "qrExpiredHint": "The code refreshes automatically while you wait.",
+      "connectedAs": "Connected as {phone}",
+      "disconnect": "Disconnect",
+      "disconnecting": "Disconnecting…",
+      "disconnectConfirm": "Disconnect this number? Conversations and contacts are kept.",
+      "disconnectFailed": "Could not disconnect. Check the Uazapi server and try again.",
+      "sessionDown": "Session is not active — reconnect via QR Code.",
+      "serverUnreachable": "Uazapi server unreachable — check the UAZAPI_* environment variables.",
+      "tryAgain": "Uazapi server unavailable — please try again.",
+      "switchBlocked": "Disconnect the current provider before switching.",
+      "banWarning": "Unofficial connection: WhatsApp may ban numbers that send bulk unsolicited messages. Use responsibly.",
+      "connectError": "Could not start the session. Check the Uazapi server and try again.",
+      "loadingQr": "Loading QR Code…"
+    },
     "sections": {
       "overview": "Overview",
       "profile": "Your profile",
