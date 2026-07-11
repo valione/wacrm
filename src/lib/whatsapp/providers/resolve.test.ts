@@ -9,21 +9,21 @@ describe('resolveProvider', () => {
 
   it('meta: exige accessToken e expõe capacidades da Meta', async () => {
     const { resolveProvider } = await import('./resolve')
-    const p = resolveProvider({ provider: 'meta', phone_number_id: '123', waha_session: null }, 'tok')
+    const p = resolveProvider({ provider: 'meta', phone_number_id: '123', provider_session: null }, 'tok')
     expect(p.name).toBe('meta')
     expect(p.capabilities).toMatchObject({ supportsTemplates: true, has24hWindow: true })
   })
 
   it('waha: sem janela de 24h nem templates', async () => {
     const { resolveProvider } = await import('./resolve')
-    const p = resolveProvider({ provider: 'waha', phone_number_id: null, waha_session: 'wacrm_a1' }, null)
+    const p = resolveProvider({ provider: 'waha', phone_number_id: null, provider_session: 'wacrm_a1' }, null)
     expect(p.name).toBe('waha')
     expect(p.capabilities).toMatchObject({ supportsTemplates: false, has24hWindow: false, supportsInteractive: false })
   })
 
-  it('waha sem waha_session lança erro claro', async () => {
+  it('waha sem provider_session lança erro claro', async () => {
     const { resolveProvider } = await import('./resolve')
-    expect(() => resolveProvider({ provider: 'waha', phone_number_id: null, waha_session: null }, null))
+    expect(() => resolveProvider({ provider: 'waha', phone_number_id: null, provider_session: null }, null))
       .toThrow(/sessão WAHA/)
   })
 })

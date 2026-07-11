@@ -12,12 +12,12 @@ export { CAPABILITIES } from './types'
  * call sites); para WAHA o token é ignorado.
  */
 export function resolveProvider(
-  config: Pick<WhatsAppConfig, 'provider' | 'phone_number_id' | 'waha_session'>,
+  config: Pick<WhatsAppConfig, 'provider' | 'phone_number_id' | 'provider_session'>,
   accessToken: string | null,
 ): WhatsAppProvider {
   if (config.provider === 'waha') {
-    if (!config.waha_session) throw new Error('Config WAHA sem sessão WAHA vinculada — reconecte pelo QR Code.')
-    return wahaProvider(config.waha_session)
+    if (!config.provider_session) throw new Error('Config WAHA sem sessão WAHA vinculada — reconecte pelo QR Code.')
+    return wahaProvider(config.provider_session)
   }
   if (!config.phone_number_id) throw new Error('Config Meta sem phone_number_id.')
   if (!accessToken) throw new Error('Config Meta sem access token descriptografado.')

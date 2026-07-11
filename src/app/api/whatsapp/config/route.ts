@@ -92,7 +92,7 @@ export async function GET() {
 
     const { data: config, error: configError } = await supabase
       .from('whatsapp_config')
-      .select('phone_number_id, access_token, status, provider, waha_session, waha_phone')
+      .select('phone_number_id, access_token, status, provider, provider_session, provider_phone')
       .eq('account_id', accountId)
       .maybeSingle()
 
@@ -127,14 +127,14 @@ export async function GET() {
 
     if (config.provider === 'waha') {
       try {
-        const info = await getSession({ session: config.waha_session! })
+        const info = await getSession({ session: config.provider_session! })
         return NextResponse.json({
           connected: info.status === 'WORKING',
           provider: 'waha',
           capabilities: CAPABILITIES.waha,
           waha_available: true,
           waha_status: info.status,
-          phone: config.waha_phone,
+          phone: config.provider_phone,
           ...(info.status !== 'WORKING' && {
             reason: 'waha_session_down',
             message: 'A sessão WAHA não está ativa — reconecte pelo QR Code.',
@@ -515,13 +515,13 @@ export async function DELETE() {
 
     const { data: config } = await supabase
       .from('whatsapp_config')
-      .select('provider, waha_session')
+      .select('provider, provider_session')
       .eq('account_id', accountId)
       .maybeSingle()
 
-    if (config?.provider === 'waha' && wahaEnabled() && config.waha_session) {
+    if (config?.provider === 'waha' && wahaEnabled() && config.provider_session) {
       try {
-        await logoutAndDelete({ session: config.waha_session })
+        await logoutAndDelete({ session: config.provider_session })
       } catch (err) {
         console.error('[whatsapp/config DELETE] WAHA logout failed (non-fatal):', err)
       }

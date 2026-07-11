@@ -32,8 +32,8 @@ export async function POST(request: NextRequest) {
   const db = supabaseAdmin()
   const { data: config } = await db
     .from('whatsapp_config')
-    .select('account_id, user_id, waha_session')
-    .eq('waha_session', event.session)
+    .select('account_id, user_id, provider_session')
+    .eq('provider_session', event.session)
     .eq('provider', 'waha')
     .maybeSingle()
   if (!config) {
@@ -66,7 +66,7 @@ export async function POST(request: NextRequest) {
         if (p.status === 'STOPPED' || p.status === 'FAILED') {
           await db.from('whatsapp_config')
             .update({ status: 'disconnected' })
-            .eq('waha_session', event.session)
+            .eq('provider_session', event.session)
           await db.from('notifications').insert({
             account_id: config.account_id,
             user_id: config.user_id,
@@ -77,7 +77,7 @@ export async function POST(request: NextRequest) {
         } else if (p.status === 'WORKING') {
           await db.from('whatsapp_config')
             .update({ status: 'connected' })
-            .eq('waha_session', event.session)
+            .eq('provider_session', event.session)
         }
       }
     } catch (err) {

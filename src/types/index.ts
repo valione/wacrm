@@ -269,12 +269,12 @@ export interface MessageReaction {
 export interface WhatsAppConfig {
   id: string;
   user_id: string;
-  /** Provedor da conexão. 'meta' = Cloud API oficial; 'waha' = sessão WAHA via QR. */
-  provider: 'meta' | 'waha';
-  /** Nome da sessão no servidor WAHA (`wacrm_<account_id>`). Null para Meta. */
-  waha_session?: string | null;
+  /** Provedor da conexão. 'meta' = Cloud API oficial; 'waha'/'uazapi' = sessão via QR. */
+  provider: 'meta' | 'waha' | 'uazapi';
+  /** Identificador da sessão/instância no provedor não-Meta (nome da sessão WAHA ou id da instância Uazapi). Null para Meta. */
+  provider_session?: string | null;
   /** Número vinculado após o QR (E.164 sem '+'). Null para Meta. */
-  waha_phone?: string | null;
+  provider_phone?: string | null;
   phone_number_id: string | null;
   waba_id?: string;
   access_token: string;

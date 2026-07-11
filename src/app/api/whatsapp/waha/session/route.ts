@@ -121,8 +121,8 @@ export async function GET() {
           account_id: accountId,
           user_id: userId,
           provider: 'waha',
-          waha_session: session,
-          waha_phone: phone,
+          provider_session: session,
+          provider_phone: phone,
           phone_number_id: null,
           access_token: 'waha', // NOT NULL no schema; valor sentinela nunca usado
           status: 'connected',
