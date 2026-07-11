@@ -7,6 +7,8 @@ import {
   verifyPhoneNumber,
 } from '@/lib/whatsapp/meta-api'
 import { encrypt, decrypt } from '@/lib/whatsapp/encryption'
+import { CAPABILITIES } from '@/lib/whatsapp/providers/resolve'
+import { wahaEnabled, getSession, logoutAndDelete } from '@/lib/whatsapp/waha-api'
 
 /**
  * Resolve the caller's account_id from their profile. Inlined here
@@ -80,6 +82,9 @@ export async function GET() {
           connected: false,
           reason: 'no_account',
           message: 'Your profile is not linked to an account.',
+          provider: null,
+          capabilities: null,
+          waha_available: wahaEnabled(),
         },
         { status: 200 },
       )
@@ -87,14 +92,21 @@ export async function GET() {
 
     const { data: config, error: configError } = await supabase
       .from('whatsapp_config')
-      .select('phone_number_id, access_token, status')
+      .select('phone_number_id, access_token, status, provider, waha_session, waha_phone')
       .eq('account_id', accountId)
       .maybeSingle()
 
     if (configError) {
       console.error('Error fetching whatsapp_config:', configError)
       return NextResponse.json(
-        { connected: false, reason: 'db_error', message: 'Failed to fetch configuration' },
+        {
+          connected: false,
+          reason: 'db_error',
+          message: 'Failed to fetch configuration',
+          provider: null,
+          capabilities: null,
+          waha_available: wahaEnabled(),
+        },
         { status: 200 }
       )
     }
@@ -105,9 +117,39 @@ export async function GET() {
           connected: false,
           reason: 'no_config',
           message: 'No WhatsApp configuration saved yet. Fill in the form and click Save Configuration.',
+          provider: null,
+          capabilities: null,
+          waha_available: wahaEnabled(),
         },
         { status: 200 }
       )
+    }
+
+    if (config.provider === 'waha') {
+      try {
+        const info = await getSession({ session: config.waha_session! })
+        return NextResponse.json({
+          connected: info.status === 'WORKING',
+          provider: 'waha',
+          capabilities: CAPABILITIES.waha,
+          waha_available: true,
+          waha_status: info.status,
+          phone: config.waha_phone,
+          ...(info.status !== 'WORKING' && {
+            reason: 'waha_session_down',
+            message: 'A sessão WAHA não está ativa — reconecte pelo QR Code.',
+          }),
+        })
+      } catch {
+        return NextResponse.json({
+          connected: false,
+          provider: 'waha',
+          capabilities: CAPABILITIES.waha,
+          waha_available: wahaEnabled(),
+          reason: 'waha_server_unreachable',
+          message: 'Servidor WAHA inacessível — verifique WAHA_URL e se o container está no ar.',
+        })
+      }
     }
 
     // Try to decrypt the stored token with the current ENCRYPTION_KEY.
@@ -124,6 +166,9 @@ export async function GET() {
           needs_reset: true,
           message:
             'The stored access token cannot be decrypted with the current ENCRYPTION_KEY. This usually means the key changed, or it differs between environments (local vs Hostinger vs Vercel). Click "Reset Configuration" below, then re-save.',
+          provider: 'meta',
+          capabilities: CAPABILITIES.meta,
+          waha_available: wahaEnabled(),
         },
         { status: 200 }
       )
@@ -135,7 +180,13 @@ export async function GET() {
         phoneNumberId: config.phone_number_id,
         accessToken,
       })
-      return NextResponse.json({ connected: true, phone_info: phoneInfo })
+      return NextResponse.json({
+        connected: true,
+        phone_info: phoneInfo,
+        provider: 'meta',
+        capabilities: CAPABILITIES.meta,
+        waha_available: wahaEnabled(),
+      })
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown Meta API error'
       console.error('[whatsapp/config GET] Meta API verification failed:', message)
@@ -144,6 +195,9 @@ export async function GET() {
           connected: false,
           reason: 'meta_api_error',
           message: `Meta API rejected the credentials: ${message}`,
+          provider: 'meta',
+          capabilities: CAPABILITIES.meta,
+          waha_available: wahaEnabled(),
         },
         { status: 200 }
       )
@@ -457,6 +511,20 @@ export async function DELETE() {
         { error: 'Your profile is not linked to an account.' },
         { status: 403 },
       )
+    }
+
+    const { data: config } = await supabase
+      .from('whatsapp_config')
+      .select('provider, waha_session')
+      .eq('account_id', accountId)
+      .maybeSingle()
+
+    if (config?.provider === 'waha' && wahaEnabled() && config.waha_session) {
+      try {
+        await logoutAndDelete({ session: config.waha_session })
+      } catch (err) {
+        console.error('[whatsapp/config DELETE] WAHA logout failed (non-fatal):', err)
+      }
     }
 
     const { error: deleteError } = await supabase
