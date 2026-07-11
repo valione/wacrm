@@ -26,6 +26,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { useTranslations } from 'next-intl';
 import { Card, CardContent } from '@/components/ui/card';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { SettingsPanelHead } from './settings-panel-head';
 import {
   Dialog,
@@ -126,8 +127,16 @@ function emptyButton(type: TemplateButton['type']): TemplateButton {
 
 export function TemplateManager() {
   const t = useTranslations('Settings.templates');
+  const tw = useTranslations('Settings.waha');
   const supabase = createClient();
   const { user, loading: authLoading } = useAuth();
+
+  // Templates are a Meta Cloud API feature. When the active provider is
+  // WAHA the capability is absent, so we swap the whole manager for a
+  // notice pointing back at the provider selector. `providerResolved`
+  // gates the render until we know, to avoid flashing the manager first.
+  const [templatesBlocked, setTemplatesBlocked] = useState(false);
+  const [providerResolved, setProviderResolved] = useState(false);
 
   const [loading, setLoading] = useState(true);
   const [templates, setTemplates] = useState<MessageTemplate[]>([]);
@@ -176,6 +185,29 @@ export function TemplateManager() {
       return { ...prev, body_samples: next };
     });
   }, [bodyVarCount]);
+
+  // Resolve the active provider's capabilities once. WAHA reports
+  // `supportsTemplates: false`; Meta (or no config) leaves templates
+  // available.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/api/whatsapp/config', { method: 'GET' });
+        const payload = await res.json();
+        if (!cancelled) {
+          setTemplatesBlocked(payload?.capabilities?.supportsTemplates === false);
+        }
+      } catch {
+        // On failure, err toward showing the manager.
+      } finally {
+        if (!cancelled) setProviderResolved(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (authLoading) return;
@@ -447,11 +479,35 @@ export function TemplateManager() {
     }));
   }
 
-  if (loading) {
+  if (loading || !providerResolved) {
     return (
       <div className="flex items-center justify-center py-12">
         <Loader2 className="size-6 animate-spin text-primary" />
       </div>
+    );
+  }
+
+  // WAHA provider — templates aren't supported. Point the user back at
+  // the provider selector instead of rendering the (non-functional)
+  // manager.
+  if (templatesBlocked) {
+    return (
+      <section className="animate-in fade-in-50 space-y-4 duration-200">
+        <SettingsPanelHead title={t('title')} description={t('description')} />
+        <Alert>
+          <div className="flex items-start gap-3">
+            <AlertCircle className="mt-0.5 size-5 shrink-0 text-muted-foreground" />
+            <div>
+              <AlertTitle className="text-foreground">
+                {tw('templatesUnavailable')}
+              </AlertTitle>
+              <AlertDescription className="text-muted-foreground">
+                {tw('templatesUnavailableHint')}
+              </AlertDescription>
+            </div>
+          </div>
+        </Alert>
+      </section>
     );
   }
 

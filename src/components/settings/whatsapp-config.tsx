@@ -13,6 +13,7 @@ import {
   Zap,
   AlertTriangle,
   RotateCcw,
+  QrCode,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
@@ -23,21 +24,73 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { SettingsPanelHead } from './settings-panel-head';
+import { WhatsAppWahaConfig } from './whatsapp-waha-config';
 import {
   Accordion,
   AccordionItem,
   AccordionTrigger,
   AccordionContent,
 } from '@/components/ui/accordion';
+import { cn } from '@/lib/utils';
 import type { WhatsAppConfig as WhatsAppConfigType } from '@/types';
 
 const MASKED_TOKEN = '••••••••••••••••';
 
 type ConnectionStatus = 'connected' | 'disconnected' | 'unknown';
 type ResetReason = 'token_corrupted' | 'meta_api_error' | null;
+type Provider = 'meta' | 'waha';
+
+/**
+ * One of the two clickable provider cards in the selector. Native
+ * button styled like the page's Cards so the selector reads as part of
+ * the same surface. When the opposite provider owns a saved config the
+ * card is disabled and carries the `switchBlocked` hint as a native
+ * tooltip (kept deliberately simple per the task brief).
+ */
+function ProviderCard({
+  active,
+  disabled,
+  disabledHint,
+  icon,
+  title,
+  hint,
+  onClick,
+}: {
+  active: boolean;
+  disabled: boolean;
+  disabledHint: string;
+  icon: React.ReactNode;
+  title: string;
+  hint: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={disabled ? undefined : onClick}
+      disabled={disabled}
+      aria-pressed={active}
+      title={disabled ? disabledHint : undefined}
+      className={cn(
+        'flex flex-col gap-1 rounded-lg border p-4 text-left transition-colors',
+        active
+          ? 'border-primary bg-primary-soft'
+          : 'border-border bg-card hover:bg-muted',
+        disabled && 'cursor-not-allowed opacity-50 hover:bg-card',
+      )}
+    >
+      <span className="flex items-center gap-2 font-medium text-foreground">
+        {icon}
+        {title}
+      </span>
+      <span className="text-xs text-muted-foreground">{hint}</span>
+    </button>
+  );
+}
 
 export function WhatsAppConfig() {
   const t = useTranslations('Settings.whatsapp');
+  const tw = useTranslations('Settings.waha');
   const supabase = createClient();
   // After multi-user, whatsapp_config is one-row-per-account, not
   // one-row-per-user. We pull `accountId` straight off the auth
@@ -55,6 +108,15 @@ export function WhatsAppConfig() {
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('unknown');
   const [resetReason, setResetReason] = useState<ResetReason>(null);
   const [statusMessage, setStatusMessage] = useState<string>('');
+  // Provider selection. `wahaAvailable` gates the whole selector (only
+  // shown when the WAHA backend is configured). `savedProvider` is the
+  // provider that currently owns a persisted config — while set, the
+  // *other* provider's card is locked so a connected number can't be
+  // silently switched out from under itself. `selectedProvider` is the
+  // active tab, initialised from the saved provider.
+  const [wahaAvailable, setWahaAvailable] = useState(false);
+  const [savedProvider, setSavedProvider] = useState<Provider | null>(null);
+  const [selectedProvider, setSelectedProvider] = useState<Provider>('meta');
   // Guards against re-hydrating the form when the load effect below
   // re-runs for reasons unrelated to actually switching accounts —
   // e.g. Supabase's onAuthStateChange fires a token refresh (new
@@ -133,12 +195,20 @@ export function WhatsAppConfig() {
       // Clear any stale probe result when reloading the row.
       setRegistrationProbe(null);
 
-      // Then verify health via the API (decrypts token + pings Meta)
-      if (data) {
-        try {
-          const res = await fetch('/api/whatsapp/config', { method: 'GET' });
-          const payload = await res.json();
+      // Ask the API for provider/capabilities + health. This runs even
+      // when there is no saved Supabase row so the selector can learn
+      // whether WAHA is available for a fresh account; when a row does
+      // exist the same payload also carries the Meta health verdict.
+      try {
+        const res = await fetch('/api/whatsapp/config', { method: 'GET' });
+        const payload = await res.json();
 
+        setWahaAvailable(Boolean(payload.waha_available));
+        const prov = (payload.provider as Provider | null) ?? null;
+        setSavedProvider(prov);
+        setSelectedProvider(prov ?? 'meta');
+
+        if (data) {
           if (payload.connected) {
             setConnectionStatus('connected');
             setResetReason(null);
@@ -148,14 +218,14 @@ export function WhatsAppConfig() {
             setResetReason(payload.needs_reset ? 'token_corrupted' : payload.reason === 'meta_api_error' ? 'meta_api_error' : null);
             setStatusMessage(payload.message || '');
           }
-        } catch (err) {
-          console.error('Health check failed:', err);
+        } else {
           setConnectionStatus('disconnected');
+          setResetReason(null);
+          setStatusMessage('');
         }
-      } else {
+      } catch (err) {
+        console.error('Health check failed:', err);
         setConnectionStatus('disconnected');
-        setResetReason(null);
-        setStatusMessage('');
       }
     } catch (err) {
       console.error('fetchConfig error:', err);
@@ -366,6 +436,13 @@ export function WhatsAppConfig() {
     }
   }
 
+  // Passed to the WAHA panel so a session going live (or being torn
+  // down) re-runs the provider/health fetch — that keeps `savedProvider`
+  // fresh and re-locks/unlocks the selector cards accordingly.
+  const reloadStatus = useCallback(() => {
+    if (accountId) void fetchConfig(accountId);
+  }, [accountId, fetchConfig]);
+
   function handleCopyWebhookUrl() {
     navigator.clipboard.writeText(webhookUrl);
     toast.success('Webhook URL copied to clipboard');
@@ -393,6 +470,40 @@ export function WhatsAppConfig() {
         title={t("title")}
         description={t("description")}
       />
+
+      {/* Provider selector — only when the WAHA backend is available.
+          A saved config on one provider locks the opposite card. */}
+      {wahaAvailable && (
+        <div className="mb-6">
+          <h3 className="mb-3 text-sm font-medium text-foreground">
+            {tw('providerTitle')}
+          </h3>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <ProviderCard
+              active={selectedProvider === 'meta'}
+              disabled={savedProvider === 'waha'}
+              disabledHint={tw('switchBlocked')}
+              icon={<Zap className="size-4 text-primary" />}
+              title={tw('providerMeta')}
+              hint={tw('providerMetaHint')}
+              onClick={() => setSelectedProvider('meta')}
+            />
+            <ProviderCard
+              active={selectedProvider === 'waha'}
+              disabled={savedProvider === 'meta'}
+              disabledHint={tw('switchBlocked')}
+              icon={<QrCode className="size-4 text-primary" />}
+              title={tw('providerWaha')}
+              hint={tw('providerWahaHint')}
+              onClick={() => setSelectedProvider('waha')}
+            />
+          </div>
+        </div>
+      )}
+
+      {selectedProvider === 'waha' ? (
+        <WhatsAppWahaConfig onChanged={reloadStatus} />
+      ) : (
       <div className="grid gap-6 lg:grid-cols-[1fr_380px]">
       {/* Main config form */}
       <div className="space-y-6">
@@ -835,6 +946,7 @@ export function WhatsAppConfig() {
         </Card>
       </div>
     </div>
+      )}
     </section>
   );
 }
