@@ -1,8 +1,6 @@
 import {
   sendInteractiveButtons,
   sendInteractiveList,
-  sendMediaMessage,
-  sendTextMessage,
   type InteractiveButton,
   type InteractiveListSection,
   type MediaKind,
@@ -15,6 +13,7 @@ import {
   phoneVariants,
   isRecipientNotAllowedError,
 } from '@/lib/whatsapp/phone-utils'
+import { resolveProvider } from '@/lib/whatsapp/providers/resolve'
 import { supabaseAdmin } from './admin-client'
 
 // ------------------------------------------------------------
@@ -91,12 +90,11 @@ export async function engineSendText(
     throw new Error('WhatsApp not configured for this account')
   }
 
-  const accessToken = decrypt(config.access_token)
+  const accessToken = config.provider === 'waha' ? null : decrypt(config.access_token)
+  const provider = resolveProvider(config, accessToken)
 
   const attempt = async (phone: string): Promise<string> => {
-    const r = await sendTextMessage({
-      phoneNumberId: config.phone_number_id,
-      accessToken,
+    const r = await provider.sendText({
       to: phone,
       text: args.text,
     })
@@ -201,15 +199,14 @@ export async function engineSendMedia(
     throw new Error('WhatsApp not configured for this account')
   }
 
-  const accessToken = decrypt(config.access_token)
+  const accessToken = config.provider === 'waha' ? null : decrypt(config.access_token)
+  const provider = resolveProvider(config, accessToken)
 
   const attempt = async (phone: string): Promise<string> => {
-    const r = await sendMediaMessage({
-      phoneNumberId: config.phone_number_id,
-      accessToken,
+    const r = await provider.sendMedia({
       to: phone,
       kind: args.kind,
-      link: args.link,
+      mediaUrl: args.link,
       caption: args.caption,
       filename: args.filename,
     })
@@ -351,6 +348,10 @@ async function sendInteractiveViaMeta(
     .single()
   if (configErr || !config) {
     throw new Error('WhatsApp not configured for this account')
+  }
+
+  if (config.provider === 'waha') {
+    throw new Error('nó interativo não suportado em conta WAHA (fallback chega na fase 3)')
   }
 
   const accessToken = decrypt(config.access_token)
