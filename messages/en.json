@@ -622,7 +622,9 @@
       "backToBroadcasts": "Back to Broadcasts",
       "notFound": "Broadcast not found",
       "template": "Template: {name}",
+      "contentSummary": "Message: {summary}",
       "createdAt": "Created {date}",
+      "scheduledAt": "Scheduled for {date}",
       "deletePrompt": "Delete this broadcast?",
       "cancel": "Cancel",
       "confirm": "Confirm",
@@ -655,7 +657,20 @@
         "failed": "Failed"
       },
       "toastFailedDelete": "Failed to delete: {error}",
-      "toastDeleted": "Broadcast deleted"
+      "toastDeleted": "Broadcast deleted",
+      "controls": {
+        "pause": "Pause",
+        "resume": "Resume",
+        "cancel": "Cancel broadcast",
+        "confirmCancel": "Cancel this broadcast? Pending recipients will not be sent.",
+        "actionError": "Something went wrong. Please try again.",
+        "stalledBanner": "No progress for several minutes — check the cron configuration (docs/automations-and-cron.md).",
+        "success": {
+          "pause": "Broadcast paused",
+          "resume": "Broadcast resumed",
+          "cancel": "Broadcast cancelled"
+        }
+      }
     },
     "new": {
       "title": "New Broadcast",

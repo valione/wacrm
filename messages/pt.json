@@ -622,7 +622,9 @@
       "backToBroadcasts": "Voltar para Transmissões",
       "notFound": "Transmissão não encontrada",
       "template": "Modelo: {name}",
+      "contentSummary": "Mensagem: {summary}",
       "createdAt": "Criada em {date}",
+      "scheduledAt": "Agendada para {date}",
       "deletePrompt": "Excluir esta transmissão?",
       "cancel": "Cancelar",
       "confirm": "Confirmar",
@@ -655,7 +657,20 @@
         "failed": "Falhas"
       },
       "toastFailedDelete": "Falha ao excluir: {error}",
-      "toastDeleted": "Transmissão excluída"
+      "toastDeleted": "Transmissão excluída",
+      "controls": {
+        "pause": "Pausar",
+        "resume": "Retomar",
+        "cancel": "Cancelar transmissão",
+        "confirmCancel": "Cancelar esta transmissão? Os destinatários pendentes não receberão a mensagem.",
+        "actionError": "Algo deu errado. Tente novamente.",
+        "stalledBanner": "Sem progresso há alguns minutos — verifique a configuração do cron (docs/automations-and-cron.md).",
+        "success": {
+          "pause": "Transmissão pausada",
+          "resume": "Transmissão retomada",
+          "cancel": "Transmissão cancelada"
+        }
+      }
     },
     "new": {
       "title": "Nova Transmissão",

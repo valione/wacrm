@@ -1,10 +1,12 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import { format } from 'date-fns';
 import { createClient } from '@/lib/supabase/client';
 import { Broadcast, BroadcastRecipient, RecipientStatus } from '@/types';
 import { Button } from '@/components/ui/button';
+import { Alert, AlertTitle } from '@/components/ui/alert';
 import {
   Table,
   TableBody,
@@ -27,11 +29,15 @@ import {
   CheckCheck,
   Eye,
   AlertCircle,
+  AlertTriangle,
   MessageCircle,
   Filter,
   Download,
-  ChevronDown,
   Trash2,
+  PauseCircle,
+  PlayCircle,
+  Ban,
+  ChevronDown,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -39,6 +45,32 @@ import {
   getRecipientStatus,
 } from '@/lib/broadcast-status';
 import { useTranslations } from 'next-intl';
+
+/** Broadcast statuses driven by the cron processor (Task 4) — the
+ * detail page polls while in any of these and shows pause/resume/
+ * cancel controls for broadcasts on the cron path. */
+const CRON_ACTIVE_STATUSES: readonly string[] = ['scheduled', 'sending', 'paused'];
+
+/** How often to re-poll while the broadcast is cron-active. */
+const POLL_INTERVAL_MS = 5000;
+
+/** No counter movement for this long while `sending` → cron looks stuck. */
+const STALL_THRESHOLD_MS = 5 * 60 * 1000;
+
+type BroadcastAction = 'pause' | 'resume' | 'cancel';
+
+/** Signature of the counters we watch for stall detection. */
+function countsSignature(b: Broadcast): string {
+  return [b.sent_count, b.delivered_count, b.read_count, b.replied_count, b.failed_count].join(
+    ':',
+  );
+}
+
+/** First ~80 chars of free-text content, for the header subtitle when
+ * there's no template_name (content_text broadcasts, migration 039). */
+function summarizeContentText(text: string, max = 80): string {
+  return text.length > max ? `${text.slice(0, max)}…` : text;
+}
 
 interface StatCardProps {
   label: string;
@@ -158,38 +190,130 @@ export default function BroadcastDetailPage() {
   );
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [pendingAction, setPendingAction] = useState<BroadcastAction | null>(null);
+  const [stalled, setStalled] = useState(false);
 
-  useEffect(() => {
-    async function fetchData() {
-      try {
-        const supabase = createClient();
+  // Last-seen counters signature + timestamp, for the "cron looks stuck"
+  // banner — compared client-side across polls, not persisted.
+  const progressRef = useRef<{ signature: string; since: number } | null>(null);
 
-        const { data: bc, error: bcError } = await supabase
-          .from('broadcasts')
-          .select('*')
-          .eq('id', broadcastId)
-          .single();
+  const fetchData = useCallback(async () => {
+    const supabase = createClient();
 
-        if (bcError) throw bcError;
-        setBroadcast(bc);
+    const { data: bc, error: bcError } = await supabase
+      .from('broadcasts')
+      .select('*')
+      .eq('id', broadcastId)
+      .single();
 
-        const { data: recs, error: recsError } = await supabase
-          .from('broadcast_recipients')
-          .select('*, contact:contacts(*)')
-          .eq('broadcast_id', broadcastId)
-          .order('created_at', { ascending: false });
+    if (bcError) throw bcError;
 
-        if (recsError) throw recsError;
-        setRecipients(recs ?? []);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : t('notFound'));
-      } finally {
-        setLoading(false);
-      }
-    }
+    const { data: recs, error: recsError } = await supabase
+      .from('broadcast_recipients')
+      .select('*, contact:contacts(*)')
+      .eq('broadcast_id', broadcastId)
+      .order('created_at', { ascending: false });
 
-    fetchData();
+    if (recsError) throw recsError;
+
+    return { broadcast: bc as Broadcast, recipients: (recs ?? []) as BroadcastRecipient[] };
   }, [broadcastId]);
+
+  // Recomputes the stall banner from a freshly fetched broadcast row.
+  // Resets the baseline whenever status leaves `sending` or the
+  // counters actually move; flips `stalled` once the same signature
+  // has held for STALL_THRESHOLD_MS.
+  const trackProgress = useCallback((bc: Broadcast) => {
+    if (bc.status !== 'sending') {
+      progressRef.current = null;
+      setStalled(false);
+      return;
+    }
+    const signature = countsSignature(bc);
+    const now = Date.now();
+    if (!progressRef.current || progressRef.current.signature !== signature) {
+      progressRef.current = { signature, since: now };
+      setStalled(false);
+      return;
+    }
+    if (now - progressRef.current.since >= STALL_THRESHOLD_MS) {
+      setStalled(true);
+    }
+  }, []);
+
+  // Initial load.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { broadcast: bc, recipients: recs } = await fetchData();
+        if (cancelled) return;
+        setBroadcast(bc);
+        setRecipients(recs);
+        trackProgress(bc);
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : t('notFound'));
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchData, trackProgress, t]);
+
+  // Poll while the broadcast is on the cron path — draft/sent/failed
+  // are terminal (or not cron-driven) and don't need it. Re-runs (and
+  // clears the previous interval) whenever the status changes; leaving
+  // the polled set clears the interval and simply doesn't schedule a
+  // new one.
+  const broadcastStatus = broadcast?.status;
+  useEffect(() => {
+    if (!broadcastStatus || !CRON_ACTIVE_STATUSES.includes(broadcastStatus)) return;
+
+    const interval = setInterval(async () => {
+      try {
+        const { broadcast: bc, recipients: recs } = await fetchData();
+        setBroadcast(bc);
+        setRecipients(recs);
+        trackProgress(bc);
+      } catch (err) {
+        console.error('[broadcast detail] polling failed:', err);
+      }
+    }, POLL_INTERVAL_MS);
+
+    return () => clearInterval(interval);
+  }, [broadcastStatus, fetchData, trackProgress]);
+
+  async function handleAction(action: BroadcastAction) {
+    if (action === 'cancel' && !window.confirm(t('controls.confirmCancel'))) {
+      return;
+    }
+    setPendingAction(action);
+    try {
+      const res = await fetch(`/api/whatsapp/broadcasts/${broadcastId}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action }),
+      });
+      const body = await res.json().catch(() => null);
+      if (!res.ok) {
+        toast.error(body?.message ?? body?.error ?? t('controls.actionError'));
+        return;
+      }
+      toast.success(t(`controls.success.${action}`));
+      const { broadcast: bc, recipients: recs } = await fetchData();
+      setBroadcast(bc);
+      setRecipients(recs);
+      trackProgress(bc);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t('controls.actionError'));
+    } finally {
+      setPendingAction(null);
+    }
+  }
 
   const filteredRecipients = useMemo(
     () =>
@@ -265,6 +389,14 @@ export default function BroadcastDetailPage() {
 
   const status = getBroadcastStatus(broadcast.status);
 
+  // Cron-path broadcasts (Task 4's processor) are the ones created via
+  // the free-text/scheduled wizard — template-only instant sends never
+  // set either field, so this doubles as "has pause/resume/cancel".
+  const isCronPath = broadcast.content_text != null || broadcast.scheduled_at != null;
+  const canPause = isCronPath && broadcast.status === 'sending';
+  const canResume = isCronPath && broadcast.status === 'paused';
+  const canCancel = isCronPath && CRON_ACTIVE_STATUSES.includes(broadcast.status);
+
   const funnelSteps: FunnelStep[] = [
     { label: t('stats.sent'), value: broadcast.sent_count, color: 'bg-primary' },
     { label: t('stats.delivered'), value: broadcast.delivered_count, color: 'bg-teal-500' },
@@ -294,62 +426,140 @@ export default function BroadcastDetailPage() {
                 {tStatus(status.label)}
               </span>
             </div>
-            <div className="mt-1 flex items-center gap-3 text-sm text-muted-foreground">
-              {/* TODO(fase 2 UI): broadcasts de conteúdo livre (content_text)
-                  ainda não têm exibição própria aqui — esta linha assume
-                  template_name presente. */}
-              <span>{t('template', { name: broadcast.template_name! })}</span>
+            <div className="mt-1 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+              {/* template_name and content_text are mutually exclusive
+                  (DB CHECK, migration 039) — prefer the template label,
+                  fall back to a truncated preview of the free text, and
+                  render nothing if somehow neither is set. */}
+              {broadcast.template_name ? (
+                <span>{t('template', { name: broadcast.template_name })}</span>
+              ) : broadcast.content_text ? (
+                <span>
+                  {t('contentSummary', { summary: summarizeContentText(broadcast.content_text) })}
+                </span>
+              ) : null}
               <span>-</span>
               <span>
                 {t('createdAt', { date: new Date(broadcast.created_at).toLocaleDateString() })}
               </span>
+              {broadcast.status === 'scheduled' && broadcast.scheduled_at && (
+                <>
+                  <span>-</span>
+                  <span>
+                    {t('scheduledAt', { date: format(new Date(broadcast.scheduled_at), 'PP p') })}
+                  </span>
+                </>
+              )}
             </div>
           </div>
         </div>
 
-        {/* Delete — inline-confirm pattern matches the pipeline-settings
-            "Delete Pipeline" flow. Mid-send broadcasts can't be deleted
-            because orphaning in-flight Meta messages would leave the
-            funnel inconsistent. */}
-        {confirmDelete ? (
-          <div className="flex items-center gap-2 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-sm">
-            <span className="text-red-300">{t('deletePrompt')}</span>
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Pause/resume/cancel — cron-path broadcasts only (Task 3's
+              PATCH /api/whatsapp/broadcasts/[id]); manual instant sends
+              via the Meta template flow have neither field set. */}
+          {canPause && (
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setConfirmDelete(false)}
-              disabled={deleting}
-              className="h-7 border-border bg-transparent text-muted-foreground hover:bg-muted"
+              onClick={() => handleAction('pause')}
+              disabled={pendingAction !== null}
+              className="border-border text-muted-foreground hover:bg-muted"
             >
-              {t('cancel')}
+              {pendingAction === 'pause' ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <PauseCircle className="h-3.5 w-3.5" />
+              )}
+              {t('controls.pause')}
             </Button>
+          )}
+          {canResume && (
             <Button
+              variant="outline"
               size="sm"
-              onClick={handleDelete}
-              disabled={deleting}
-              className="h-7 bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
+              onClick={() => handleAction('resume')}
+              disabled={pendingAction !== null}
+              className="border-border text-muted-foreground hover:bg-muted"
             >
-              {deleting ? t('deleting') : t('confirm')}
+              {pendingAction === 'resume' ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <PlayCircle className="h-3.5 w-3.5" />
+              )}
+              {t('controls.resume')}
             </Button>
-          </div>
-        ) : (
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={broadcast.status === 'sending'}
-            onClick={() => setConfirmDelete(true)}
-            title={
-              broadcast.status === 'sending'
-                ? t('cannotDeleteSending')
-                : t('deleteHover')
-            }
-            className="border-red-500/30 bg-transparent text-red-400 hover:bg-red-500/10 disabled:opacity-40"
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-            {t('delete')}
-          </Button>
-        )}
+          )}
+          {canCancel && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handleAction('cancel')}
+              disabled={pendingAction !== null}
+              className="border-red-500/30 bg-transparent text-red-400 hover:bg-red-500/10"
+            >
+              {pendingAction === 'cancel' ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Ban className="h-3.5 w-3.5" />
+              )}
+              {t('controls.cancel')}
+            </Button>
+          )}
+
+          {/* Delete — inline-confirm pattern matches the pipeline-settings
+              "Delete Pipeline" flow. Mid-send broadcasts can't be deleted
+              because orphaning in-flight Meta messages would leave the
+              funnel inconsistent. */}
+          {confirmDelete ? (
+            <div className="flex items-center gap-2 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-sm">
+              <span className="text-red-300">{t('deletePrompt')}</span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setConfirmDelete(false)}
+                disabled={deleting}
+                className="h-7 border-border bg-transparent text-muted-foreground hover:bg-muted"
+              >
+                {t('cancel')}
+              </Button>
+              <Button
+                size="sm"
+                onClick={handleDelete}
+                disabled={deleting}
+                className="h-7 bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
+              >
+                {deleting ? t('deleting') : t('confirm')}
+              </Button>
+            </div>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={broadcast.status === 'sending'}
+              onClick={() => setConfirmDelete(true)}
+              title={
+                broadcast.status === 'sending'
+                  ? t('cannotDeleteSending')
+                  : t('deleteHover')
+              }
+              className="border-red-500/30 bg-transparent text-red-400 hover:bg-red-500/10 disabled:opacity-40"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              {t('delete')}
+            </Button>
+          )}
+        </div>
       </div>
+
+      {stalled && (
+        <Alert className="border-amber-700/50 bg-amber-950/30">
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
+            <AlertTitle className="mb-0 text-amber-200">{t('controls.stalledBanner')}</AlertTitle>
+          </div>
+        </Alert>
+      )}
 
       {/* Stats — 6 cards: Total / Sent / Delivered / Read / Replied / Failed */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
