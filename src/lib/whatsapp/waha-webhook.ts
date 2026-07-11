@@ -26,6 +26,8 @@ export function mapAckToStatus(ack: number): 'sent' | 'delivered' | 'read' | 'fa
 interface WahaMessagePayload {
   id: string
   from: string
+  /** Presente em ecos fromMe: o chat do interlocutor (destino). */
+  to?: string
   fromMe: boolean
   body?: string
   hasMedia?: boolean
@@ -33,6 +35,17 @@ interface WahaMessagePayload {
   timestamp: number
   replyTo?: string | null
   _data?: { notifyName?: string } | null
+}
+
+/**
+ * URL do proxy de mídia para uma URL de arquivo do servidor WAHA.
+ * Usada em dois lugares que PRECISAM produzir a mesma string byte a byte:
+ * a normalização (grava em messages.media_url) e a checagem de autorização
+ * por conta do proxy (reconstrói a partir do `src` decodificado e busca a
+ * mensagem correspondente via RLS).
+ */
+export function buildMediaProxyUrl(mediaProxyPath: string, src: string): string {
+  return `${mediaProxyPath}?src=${encodeURIComponent(src)}`
 }
 
 const MIME_TO_CONTENT: Array<[RegExp, NormalizedInboundMessage['contentType']]> = [
@@ -47,7 +60,7 @@ export function normalizeWahaMessage(
   mediaProxyPath: string,
 ): NormalizedInboundMessage | null {
   // fromMe: o interlocutor é o 'to'; inbound: é o 'from'.
-  const counterpart = payload.fromMe ? (payload as { to?: string }).to ?? payload.from : payload.from
+  const counterpart = payload.fromMe ? payload.to ?? payload.from : payload.from
   if (!counterpart.endsWith('@c.us') && !counterpart.endsWith('@s.whatsapp.net')) return null
 
   let contentType: NormalizedInboundMessage['contentType'] = 'text'
@@ -55,7 +68,7 @@ export function normalizeWahaMessage(
   if (payload.hasMedia && payload.media?.url) {
     const mime = payload.media.mimetype ?? ''
     contentType = MIME_TO_CONTENT.find(([re]) => re.test(mime))?.[1] ?? 'document'
-    mediaUrl = `${mediaProxyPath}?src=${encodeURIComponent(payload.media.url)}`
+    mediaUrl = buildMediaProxyUrl(mediaProxyPath, payload.media.url)
   }
 
   return {

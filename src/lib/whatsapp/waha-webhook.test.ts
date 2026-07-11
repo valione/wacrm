@@ -60,6 +60,23 @@ describe('waha-webhook helpers', () => {
     expect(n!.contentText).toBe('legenda')
   })
 
+  it('buildMediaProxyUrl reconstrói byte a byte a URL gravada pela normalização', async () => {
+    const { buildMediaProxyUrl, normalizeWahaMessage } = await import('./waha-webhook')
+    // Fonte com caracteres que exigem encoding (querystring, espaço, acento).
+    const src = 'http://waha.local:3001/api/files/relatório final.jpg?session=a&id=b'
+    const n = normalizeWahaMessage({
+      id: 'x', from: '55@c.us', fromMe: false, hasMedia: true,
+      media: { url: src, mimetype: 'image/jpeg', filename: null },
+      timestamp: 1767998400,
+    }, '/api/whatsapp/waha/media')
+    // A rota do proxy recebe `src` já DECODIFICADO por searchParams.get() e
+    // precisa reconstruir exatamente a string persistida em messages.media_url
+    // para a checagem de autorização por conta bater byte a byte.
+    const decoded = new URLSearchParams(n!.mediaUrl!.split('?')[1]).get('src')
+    expect(decoded).toBe(src)
+    expect(buildMediaProxyUrl('/api/whatsapp/waha/media', decoded!)).toBe(n!.mediaUrl)
+  })
+
   it('ignora eventos de grupo (sufixo @g.us)', async () => {
     const { normalizeWahaMessage } = await import('./waha-webhook')
     const n = normalizeWahaMessage({ id: 'x', from: '5511-123@g.us', fromMe: false, body: 'oi',

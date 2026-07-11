@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
   const db = supabaseAdmin()
   const { data: config } = await db
     .from('whatsapp_config')
-    .select('account_id, user_id, waha_session, status')
+    .select('account_id, user_id, waha_session')
     .eq('waha_session', event.session)
     .eq('provider', 'waha')
     .maybeSingle()
