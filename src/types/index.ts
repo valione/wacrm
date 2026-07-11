@@ -384,14 +384,19 @@ export interface Deal {
   assignee?: Profile;
 }
 
-export type BroadcastStatus = 'draft' | 'scheduled' | 'sending' | 'sent' | 'failed';
+export type BroadcastStatus = 'draft' | 'scheduled' | 'sending' | 'paused' | 'sent' | 'failed';
 export type RecipientStatus = 'pending' | 'sent' | 'delivered' | 'read' | 'replied' | 'failed';
 
 export interface Broadcast {
   id: string;
   user_id: string;
   name: string;
-  template_name: string;
+  /**
+   * Nullable since migration 039 — providers without Meta templates
+   * (WAHA/Uazapi) use content_text instead. DB CHECK enforces
+   * template_name XOR content_text.
+   */
+  template_name: string | null;
   template_language: string;
   template_variables?: Record<string, unknown>;
   audience_filter?: Record<string, unknown>;
@@ -404,6 +409,12 @@ export interface Broadcast {
   replied_count: number;
   failed_count: number;
   created_at: string;
+  /** Free text with {{...}} placeholders, for non-Meta providers. Added in migration 039. */
+  content_text?: string | null;
+  /** Optional media attachment for free-text broadcasts. Added in migration 039. */
+  content_media_url?: string | null;
+  /** Media kind for content_media_url. Added in migration 039. */
+  content_media_type?: 'image' | 'video' | 'document' | 'audio' | null;
 }
 
 export interface BroadcastRecipient {
@@ -429,6 +440,12 @@ export interface BroadcastRecipient {
   whatsapp_message_id?: string;
   created_at: string;
   contact?: Contact;
+  /**
+   * Lightweight cron lock — set when a processor tick claims this
+   * recipient for sending, so concurrent ticks skip it. Added in
+   * migration 039.
+   */
+  claimed_at?: string | null;
 }
 
 // ============================================================

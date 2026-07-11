@@ -295,7 +295,10 @@ export default function BroadcastDetailPage() {
               </span>
             </div>
             <div className="mt-1 flex items-center gap-3 text-sm text-muted-foreground">
-              <span>{t('template', { name: broadcast.template_name })}</span>
+              {/* TODO(fase 2 UI): broadcasts de conteúdo livre (content_text)
+                  ainda não têm exibição própria aqui — esta linha assume
+                  template_name presente. */}
+              <span>{t('template', { name: broadcast.template_name! })}</span>
               <span>-</span>
               <span>
                 {t('createdAt', { date: new Date(broadcast.created_at).toLocaleDateString() })}

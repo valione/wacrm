@@ -609,6 +609,7 @@
       "draft": "Draft",
       "scheduled": "Scheduled",
       "sending": "Sending",
+      "paused": "Paused",
       "sent": "Sent",
       "failed": "Failed",
       "pending": "Pending",
