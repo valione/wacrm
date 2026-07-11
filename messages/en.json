@@ -662,15 +662,18 @@
       "subtitle": "Create and send a broadcast message to your contacts.",
       "steps": {
         "template": "Template",
+        "compose": "Compose",
         "audience": "Audience",
         "personalize": "Personalize",
+        "review": "Review",
         "send": "Send"
       },
       "toastGiveName": "Give the broadcast a name before saving a draft.",
       "toastNotSignedIn": "Not signed in.",
       "toastNotLinked": "Your profile is not linked to an account.",
       "toastFailedDraft": "Failed to save draft: {error}",
-      "toastDraftSaved": "Draft saved"
+      "toastDraftSaved": "Draft saved",
+      "toastCreateFailed": "Failed to create broadcast"
     },
     "wizard": {
       "next": "Next",
@@ -766,6 +769,58 @@
         "progressDesc": "Processing {current} of {total} recipients...",
         "toastFailedPreview": "Failed to load preview data"
       }
+    },
+    "compose": {
+      "next": "Next",
+      "back": "Back",
+      "title": "Compose Message",
+      "subtitle": "Write the message your contacts will receive. Use placeholders to personalize it.",
+      "messageLabel": "Message",
+      "placeholder": "Hi {{nome}}, ...",
+      "placeholderHint": "Insert placeholders below to personalize each message.",
+      "preview": "Preview",
+      "previewSample": "sample data",
+      "previewSampleName": "Maria",
+      "previewEmpty": "Your message preview will appear here.",
+      "mediaOptional": "Media (optional)",
+      "mediaType": "Type",
+      "mediaTypeNone": "No media",
+      "mediaKind": {
+        "image": "Image",
+        "video": "Video",
+        "document": "Document",
+        "audio": "Audio"
+      },
+      "mediaUrl": "Media URL",
+      "mediaUrlPlaceholder": "https://example.com/file.jpg",
+      "mediaUrlInvalid": "Enter a valid http(s) URL.",
+      "reviewTitle": "Review Placeholders",
+      "reviewSubtitle": "Confirm where each placeholder in your message pulls its value from.",
+      "reviewNoPlaceholders": "No placeholders detected — the message is sent exactly as written.",
+      "reviewMissingWarning": "Some placeholders reference a custom field that doesn't exist. They'll be sent empty. Create the field or fix the placeholder name.",
+      "sourceContact": "Contact name",
+      "sourceCustom": "Custom field",
+      "sourceMissing": "No matching field"
+    },
+    "schedule": {
+      "message": "Message",
+      "estimatedReach": "Estimated Reach",
+      "language": "Language",
+      "whenLabel": "When to send",
+      "sendNow": "Send now",
+      "scheduleLater": "Schedule",
+      "scheduledAt": "Date and time",
+      "scheduleRequired": "Pick a date and time to schedule.",
+      "scheduleInPast": "Choose a time in the future.",
+      "minHint": "At least 5 minutes from now.",
+      "estimatedDuration": "Estimated duration: ~{minutes} min",
+      "safePace": "at the safe sending pace (~10/min)",
+      "banWarning": "Unofficial connection: WhatsApp may ban numbers that send bulk unsolicited messages. Use responsibly.",
+      "scheduleButton": "Schedule broadcast",
+      "confirmScheduleTitle": "Confirm schedule",
+      "confirmScheduleDesc": "This broadcast will be sent to {count} contacts at the scheduled time. You can cancel it before it starts.",
+      "confirmSendTitle": "Confirm broadcast",
+      "confirmSendDesc": "You are about to send this broadcast to {count} contacts. This action cannot be undone."
     }
   },
   "Automations": {

@@ -662,15 +662,18 @@
       "subtitle": "Crie e envie uma mensagem de transmissão para seus contatos.",
       "steps": {
         "template": "Modelo",
+        "compose": "Escrever",
         "audience": "Público",
         "personalize": "Personalizar",
+        "review": "Revisar",
         "send": "Enviar"
       },
       "toastGiveName": "Dê um nome à transmissão antes de salvar um rascunho.",
       "toastNotSignedIn": "Você não está conectado.",
       "toastNotLinked": "Seu perfil não está vinculado a uma conta.",
       "toastFailedDraft": "Falha ao salvar o rascunho: {error}",
-      "toastDraftSaved": "Rascunho salvo"
+      "toastDraftSaved": "Rascunho salvo",
+      "toastCreateFailed": "Falha ao criar a transmissão"
     },
     "wizard": {
       "next": "Avançar",
@@ -766,6 +769,58 @@
         "progressDesc": "Processando {current} de {total} destinatários...",
         "toastFailedPreview": "Falha ao carregar os dados de pré-visualização"
       }
+    },
+    "compose": {
+      "next": "Avançar",
+      "back": "Voltar",
+      "title": "Escrever mensagem",
+      "subtitle": "Escreva a mensagem que seus contatos vão receber. Use variáveis para personalizar.",
+      "messageLabel": "Mensagem",
+      "placeholder": "Olá {{nome}}, ...",
+      "placeholderHint": "Insira variáveis abaixo para personalizar cada mensagem.",
+      "preview": "Pré-visualização",
+      "previewSample": "dados de exemplo",
+      "previewSampleName": "Maria",
+      "previewEmpty": "A pré-visualização da sua mensagem aparecerá aqui.",
+      "mediaOptional": "Mídia (opcional)",
+      "mediaType": "Tipo",
+      "mediaTypeNone": "Sem mídia",
+      "mediaKind": {
+        "image": "Imagem",
+        "video": "Vídeo",
+        "document": "Documento",
+        "audio": "Áudio"
+      },
+      "mediaUrl": "URL da mídia",
+      "mediaUrlPlaceholder": "https://exemplo.com/arquivo.jpg",
+      "mediaUrlInvalid": "Informe uma URL http(s) válida.",
+      "reviewTitle": "Revisar variáveis",
+      "reviewSubtitle": "Confirme de onde cada variável da sua mensagem puxa o valor.",
+      "reviewNoPlaceholders": "Nenhuma variável detectada — a mensagem é enviada exatamente como escrita.",
+      "reviewMissingWarning": "Algumas variáveis referenciam um campo personalizado que não existe. Elas serão enviadas vazias. Crie o campo ou corrija o nome da variável.",
+      "sourceContact": "Nome do contato",
+      "sourceCustom": "Campo personalizado",
+      "sourceMissing": "Sem campo correspondente"
+    },
+    "schedule": {
+      "message": "Mensagem",
+      "estimatedReach": "Alcance estimado",
+      "language": "Idioma",
+      "whenLabel": "Quando enviar",
+      "sendNow": "Enviar agora",
+      "scheduleLater": "Agendar",
+      "scheduledAt": "Data e hora",
+      "scheduleRequired": "Escolha uma data e hora para agendar.",
+      "scheduleInPast": "Escolha um horário no futuro.",
+      "minHint": "No mínimo 5 minutos a partir de agora.",
+      "estimatedDuration": "Duração estimada: ~{minutes} min",
+      "safePace": "no ritmo seguro de envio (~10/min)",
+      "banWarning": "Conexão não oficial: o WhatsApp pode banir números que disparam mensagens em massa não solicitadas. Use com responsabilidade.",
+      "scheduleButton": "Agendar transmissão",
+      "confirmScheduleTitle": "Confirmar agendamento",
+      "confirmScheduleDesc": "Esta transmissão será enviada para {count} contatos no horário agendado. Você pode cancelá-la antes do início.",
+      "confirmSendTitle": "Confirmar transmissão",
+      "confirmSendDesc": "Você está prestes a enviar esta transmissão para {count} contatos. Esta ação não pode ser desfeita."
     }
   },
   "Automations": {

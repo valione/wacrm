@@ -12,7 +12,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { ArrowLeft, ArrowRight, Eye, ImageIcon, Loader2 } from 'lucide-react';
+import {
+  AlertTriangle,
+  ArrowLeft,
+  ArrowRight,
+  Eye,
+  ImageIcon,
+  Loader2,
+  User,
+  Sparkles,
+} from 'lucide-react';
 import { useTranslations } from 'next-intl';
 
 type VariableType = 'static' | 'field' | 'custom_field';
@@ -22,7 +31,10 @@ interface VariableMapping {
   value: string;
 }
 
-interface Step3Props {
+// Same placeholder grammar as src/lib/broadcasts/render.ts — keep in sync.
+const PLACEHOLDER_RE = /\{\{\s*([\wÀ-ſ]+)\s*\}\}/g;
+
+interface Step3TemplateProps {
   template: MessageTemplate;
   variables: Record<string, VariableMapping>;
   onUpdate: (variables: Record<string, VariableMapping>) => void;
@@ -31,6 +43,48 @@ interface Step3Props {
   onHeaderMediaUrlChange: (url: string) => void;
   onNext: () => void;
   onBack: () => void;
+}
+
+interface Step3Props {
+  /** Template mode — required unless `freeTextContent` is provided. */
+  template?: MessageTemplate;
+  variables?: Record<string, VariableMapping>;
+  onUpdate?: (variables: Record<string, VariableMapping>) => void;
+  headerMediaUrl?: string;
+  onHeaderMediaUrlChange?: (url: string) => void;
+  /** Free-text mode — when set, renders the placeholder review UI. */
+  freeTextContent?: string;
+  onNext: () => void;
+  onBack: () => void;
+}
+
+/**
+ * Routes between the template-variable mapper (Meta) and the free-text
+ * placeholder review (non-official providers). Kept as a thin wrapper so
+ * neither branch's hooks run under the other's mode — the two UIs live in
+ * separate components below.
+ */
+export function Step3Personalize(props: Step3Props) {
+  if (props.freeTextContent !== undefined) {
+    return (
+      <Step3FreeTextReview
+        content={props.freeTextContent}
+        onNext={props.onNext}
+        onBack={props.onBack}
+      />
+    );
+  }
+  return (
+    <Step3TemplatePersonalize
+      template={props.template!}
+      variables={props.variables ?? {}}
+      onUpdate={props.onUpdate!}
+      headerMediaUrl={props.headerMediaUrl ?? ''}
+      onHeaderMediaUrlChange={props.onHeaderMediaUrlChange!}
+      onNext={props.onNext}
+      onBack={props.onBack}
+    />
+  );
 }
 
 const MEDIA_HEADER_TYPES = ['image', 'video', 'document'] as const;
@@ -67,7 +121,7 @@ const SAMPLE_CONTACT: Contact = {
   updated_at: new Date().toISOString(),
 };
 
-export function Step3Personalize({
+function Step3TemplatePersonalize({
   template,
   variables,
   onUpdate,
@@ -75,7 +129,7 @@ export function Step3Personalize({
   onHeaderMediaUrlChange,
   onNext,
   onBack,
-}: Step3Props) {
+}: Step3TemplateProps) {
   const t = useTranslations('Broadcasts.wizard');
   const [customFields, setCustomFields] = useState<CustomField[]>([]);
   const [loadingFields, setLoadingFields] = useState(true);
@@ -443,6 +497,159 @@ export function Step3Personalize({
           onClick={onNext}
           disabled={unmappedKeys.length > 0 || headerMediaError !== null}
           className="bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+        >
+          {t('next')}
+          <ArrowRight className="h-4 w-4" />
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+interface DetectedPlaceholder {
+  /** Raw key as written, e.g. "Empresa". */
+  raw: string;
+  /** Lowercased key used for matching, e.g. "empresa". */
+  key: string;
+  /** 'contact' → resolves to the contact name; 'custom' → a custom field. */
+  source: 'contact' | 'custom';
+  /** True when source is 'custom' but no field with this name exists. */
+  missing: boolean;
+}
+
+/**
+ * Free-text review step. Non-official broadcasts have no template
+ * variables to map — the send-time renderer (src/lib/broadcasts/render.ts)
+ * resolves `{{nome}}` to the contact name and any other `{{key}}` to a
+ * custom field of the same name. This step just surfaces which
+ * placeholders were detected and where each one will pull its value from,
+ * warning when a placeholder references a custom field that doesn't exist.
+ */
+function Step3FreeTextReview({
+  content,
+  onNext,
+  onBack,
+}: {
+  content: string;
+  onNext: () => void;
+  onBack: () => void;
+}) {
+  const t = useTranslations('Broadcasts.compose');
+  const [fieldNames, setFieldNames] = useState<Set<string>>(new Set());
+  const [loadingFields, setLoadingFields] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const supabase = createClient();
+      const { data } = await supabase
+        .from('custom_fields')
+        .select('field_name');
+      if (cancelled) return;
+      setFieldNames(
+        new Set(
+          (data ?? []).map((f) =>
+            String((f as { field_name: string }).field_name).toLowerCase(),
+          ),
+        ),
+      );
+      setLoadingFields(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const placeholders = useMemo<DetectedPlaceholder[]>(() => {
+    const seen = new Map<string, DetectedPlaceholder>();
+    for (const match of content.matchAll(PLACEHOLDER_RE)) {
+      const raw = match[1];
+      const key = raw.toLowerCase();
+      if (seen.has(key)) continue;
+      const isContact = key === 'nome' || key === 'name';
+      seen.set(key, {
+        raw,
+        key,
+        source: isContact ? 'contact' : 'custom',
+        missing: !isContact && !fieldNames.has(key),
+      });
+    }
+    return [...seen.values()];
+  }, [content, fieldNames]);
+
+  const hasMissing = placeholders.some((p) => p.missing);
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-lg font-semibold text-foreground">
+          {t('reviewTitle')}
+        </h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          {t('reviewSubtitle')}
+        </p>
+      </div>
+
+      {loadingFields ? (
+        <div className="flex h-32 items-center justify-center">
+          <Loader2 className="h-5 w-5 animate-spin text-primary" />
+        </div>
+      ) : placeholders.length === 0 ? (
+        <div className="rounded-xl border border-border bg-card/50 p-6 text-center">
+          <p className="text-sm text-muted-foreground">
+            {t('reviewNoPlaceholders')}
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {placeholders.map((p) => (
+            <div
+              key={p.key}
+              className="flex items-center justify-between gap-3 rounded-xl border border-border bg-card/50 p-4"
+            >
+              <span className="inline-flex items-center rounded-md bg-primary/10 px-2 py-0.5 font-mono text-xs font-medium text-primary">
+                {`{{${p.raw}}}`}
+              </span>
+              {p.source === 'contact' ? (
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+                  <User className="h-3 w-3" />
+                  {t('sourceContact')}
+                </span>
+              ) : p.missing ? (
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-xs font-medium text-amber-300">
+                  <AlertTriangle className="h-3 w-3" />
+                  {t('sourceMissing')}
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+                  <Sparkles className="h-3 w-3" />
+                  {t('sourceCustom')}
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {hasMissing && (
+        <div className="flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <span>{t('reviewMissingWarning')}</span>
+        </div>
+      )}
+
+      <div className="flex items-center justify-between border-t border-border pt-4">
+        <Button
+          variant="outline"
+          onClick={onBack}
+          className="border-border text-muted-foreground"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          {t('back')}
+        </Button>
+        <Button
+          onClick={onNext}
+          className="bg-primary text-primary-foreground hover:bg-primary/90"
         >
           {t('next')}
           <ArrowRight className="h-4 w-4" />
