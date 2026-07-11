@@ -2,6 +2,13 @@
 import crypto from 'node:crypto'
 import type { NormalizedInboundMessage } from '@/lib/whatsapp/inbound'
 import { fromChatId } from '@/lib/whatsapp/waha-api'
+import { buildMediaProxyUrl } from '@/lib/whatsapp/media-proxy'
+
+// Re-exportado para não quebrar os call sites existentes (este arquivo e
+// src/app/api/whatsapp/waha/media/route.ts importavam a definição local).
+// A implementação real agora mora em media-proxy.ts — módulo neutro
+// compartilhado com o webhook Uazapi (ver comentário lá).
+export { buildMediaProxyUrl }
 
 /** HMAC-SHA512 hex do corpo cru, chave WAHA_WEBHOOK_SECRET. Fail-closed. */
 export function verifyWahaHmac(rawBody: string, headerValue: string | null): boolean {
@@ -35,17 +42,6 @@ interface WahaMessagePayload {
   timestamp: number
   replyTo?: string | null
   _data?: { notifyName?: string } | null
-}
-
-/**
- * URL do proxy de mídia para uma URL de arquivo do servidor WAHA.
- * Usada em dois lugares que PRECISAM produzir a mesma string byte a byte:
- * a normalização (grava em messages.media_url) e a checagem de autorização
- * por conta do proxy (reconstrói a partir do `src` decodificado e busca a
- * mensagem correspondente via RLS).
- */
-export function buildMediaProxyUrl(mediaProxyPath: string, src: string): string {
-  return `${mediaProxyPath}?src=${encodeURIComponent(src)}`
 }
 
 const MIME_TO_CONTENT: Array<[RegExp, NormalizedInboundMessage['contentType']]> = [
