@@ -236,6 +236,10 @@ export function MessageThread({
   // `true` (Meta's behavior, the more restrictive one) while capabilities
   // are still loading or unavailable.
   const hasWindow = caps?.has24hWindow ?? true;
+  // Reaction affordance gate — WAHA has no reactions. Same pattern as the
+  // 24h window above: default to `true` (Meta's behavior) while
+  // capabilities load so we never hide an affordance the provider supports.
+  const canReact = caps?.supportsReactions ?? true;
   const sessionInfo = useMemo(() => {
     if (!hasWindow) return { expired: false, remaining: "" };
 
@@ -1130,6 +1134,7 @@ export function MessageThread({
                         onReact={(emoji) => {
                           if (emoji) void postReaction(msg.id, emoji);
                         }}
+                        canReact={canReact}
                       >
                         <MessageBubble
                           message={msg}

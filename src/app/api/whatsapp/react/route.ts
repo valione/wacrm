@@ -111,7 +111,7 @@ export async function POST(request: Request) {
     // WhatsApp config + access token. Account-scoped post-multi-user.
     const { data: config, error: configError } = await supabase
       .from('whatsapp_config')
-      .select('phone_number_id, access_token')
+      .select('phone_number_id, access_token, provider')
       .eq('account_id', accountId)
       .single();
 
@@ -119,6 +119,20 @@ export async function POST(request: Request) {
       return NextResponse.json(
         { error: 'WhatsApp not configured.' },
         { status: 400 },
+      );
+    }
+
+    // Reactions are a Meta-only capability. A WAHA account stores the
+    // sentinel 'waha' in access_token, so decrypting it below would throw
+    // and surface as a generic 500. Bail out with a clear 422 BEFORE the
+    // decrypt (same `unsupported_by_provider` pattern the send path uses).
+    if (config.provider === 'waha') {
+      return NextResponse.json(
+        {
+          error: 'unsupported_by_provider',
+          message: 'Reações não são suportadas em contas conectadas via WAHA.',
+        },
+        { status: 422 },
       );
     }
 

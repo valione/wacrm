@@ -43,7 +43,9 @@ export async function POST(request: NextRequest) {
 
   after(async () => {
     try {
-      if (event.event === 'message') {
+      // `message.any` é o evento assinado (cobre recebidas + ecos fromMe).
+      // Aceitamos também `message` por robustez entre versões da WAHA.
+      if (event.event === 'message.any' || event.event === 'message') {
         const normalized = normalizeWahaMessage(
           event.payload as Parameters<typeof normalizeWahaMessage>[0],
           '/api/whatsapp/waha/media',

@@ -10,7 +10,15 @@ function wahaBase(): string {
 }
 
 export function wahaEnabled(): boolean {
-  return Boolean(process.env.WAHA_URL && process.env.WAHA_API_KEY)
+  // As TRÊS envs são obrigatórias. Sem WAHA_WEBHOOK_SECRET a sessão até
+  // conecta e envia, mas `verifyWahaHmac` é fail-closed e rejeita TODOS
+  // os webhooks com 401 — recebimento, acks e notificação de queda morrem
+  // em silêncio. Melhor nem oferecer a opção do que oferecê-la quebrada.
+  return Boolean(
+    process.env.WAHA_URL &&
+    process.env.WAHA_API_KEY &&
+    process.env.WAHA_WEBHOOK_SECRET,
+  )
 }
 
 export function wahaSessionName(accountId: string): string {
@@ -48,22 +56,42 @@ export interface WahaSessionInfo {
 
 /** Cria (ou recria) e inicia a sessão, já apontando o webhook de volta pro CRM. */
 export async function createSession(args: { session: string; webhookUrl: string }): Promise<void> {
-  await wahaFetch('/api/sessions', {
-    method: 'POST',
-    body: JSON.stringify({
-      name: args.session,
-      start: true,
-      config: {
-        webhooks: [
-          {
-            url: args.webhookUrl,
-            events: ['message', 'message.ack', 'session.status'],
-            hmac: { key: process.env.WAHA_WEBHOOK_SECRET ?? '' },
-          },
-        ],
-      },
-    }),
-  })
+  const doCreate = () =>
+    wahaFetch('/api/sessions', {
+      method: 'POST',
+      body: JSON.stringify({
+        name: args.session,
+        start: true,
+        config: {
+          webhooks: [
+            {
+              url: args.webhookUrl,
+              // `message.any` cobre TANTO as recebidas QUANTO os ecos fromMe
+              // (o evento `message` sozinho NÃO entrega fromMe). Não assinar
+              // `message` junto senão as recebidas chegam duplicadas.
+              events: ['message.any', 'message.ack', 'session.status'],
+              hmac: { key: process.env.WAHA_WEBHOOK_SECRET ?? '' },
+            },
+          ],
+        },
+      }),
+    })
+
+  try {
+    await doCreate()
+  } catch (err) {
+    // Reconexão pós-queda: se o celular derrubou a sessão mas ela ainda
+    // existe no servidor WAHA (ex.: um DELETE anterior falhou com a WAHA
+    // fora do ar), o POST responde 422 "already exists". Limpamos a sessão
+    // órfã (logoutAndDelete tolera 404) e tentamos criar UMA vez mais; se
+    // falhar de novo, propagamos.
+    if (err instanceof Error && /: 422\b/.test(err.message) && /already exists/i.test(err.message)) {
+      await logoutAndDelete({ session: args.session })
+      await doCreate()
+      return
+    }
+    throw err
+  }
 }
 
 export async function getSession(args: { session: string }): Promise<WahaSessionInfo> {

@@ -4,6 +4,7 @@ describe('waha-api', () => {
   beforeEach(() => {
     vi.stubEnv('WAHA_URL', 'http://waha.local:3001')
     vi.stubEnv('WAHA_API_KEY', 'test-key')
+    vi.stubEnv('WAHA_WEBHOOK_SECRET', 'test-secret')
     vi.stubGlobal('fetch', vi.fn())
   })
   afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals() })
@@ -41,8 +42,66 @@ describe('waha-api', () => {
       .rejects.toThrow(/fora do servidor WAHA/)
   })
 
-  it('wahaEnabled reflete presença das envs', async () => {
+  it('wahaEnabled exige as TRÊS envs (URL, API key e webhook secret)', async () => {
     const { wahaEnabled } = await import('./waha-api')
     expect(wahaEnabled()).toBe(true)
+    // Sem o secret a opção não deve aparecer: HMAC fail-closed rejeitaria
+    // todos os webhooks com 401 e o recebimento morreria em silêncio.
+    vi.stubEnv('WAHA_WEBHOOK_SECRET', '')
+    expect(wahaEnabled()).toBe(false)
+    vi.stubEnv('WAHA_WEBHOOK_SECRET', 'test-secret')
+    vi.stubEnv('WAHA_API_KEY', '')
+    expect(wahaEnabled()).toBe(false)
+    vi.stubEnv('WAHA_API_KEY', 'test-key')
+    vi.stubEnv('WAHA_URL', '')
+    expect(wahaEnabled()).toBe(false)
+  })
+
+  it('createSession assina message.any (cobre fromMe) e não duplica com message', async () => {
+    const mock = fetch as ReturnType<typeof vi.fn>
+    mock.mockResolvedValue(new Response('{}', { status: 201 }))
+    const { createSession } = await import('./waha-api')
+    await createSession({ session: 's1', webhookUrl: 'http://crm.local/api/whatsapp/webhook/waha' })
+    const [, init] = mock.mock.calls[0]
+    const body = JSON.parse(init.body as string)
+    const events = body.config.webhooks[0].events as string[]
+    expect(events).toContain('message.any')
+    expect(events).not.toContain('message') // senão as recebidas duplicariam
+    expect(events).toEqual(['message.any', 'message.ack', 'session.status'])
+  })
+
+  it('createSession recupera de sessão órfã: 422 already exists -> logout+delete -> retry', async () => {
+    const mock = fetch as ReturnType<typeof vi.fn>
+    // 1º POST /api/sessions: 422 already exists (sessão órfã pós-queda)
+    // 2º logout, 3º delete (logoutAndDelete), 4º POST /api/sessions: 201 ok
+    mock
+      .mockResolvedValueOnce(new Response('{"message":"Session \'s1\' already exists"}', { status: 422 }))
+      .mockResolvedValueOnce(new Response('{}', { status: 200 })) // logout
+      .mockResolvedValueOnce(new Response('{}', { status: 200 })) // delete
+      .mockResolvedValueOnce(new Response('{}', { status: 201 })) // retry create
+    const { createSession } = await import('./waha-api')
+    await expect(
+      createSession({ session: 's1', webhookUrl: 'http://crm.local/api/whatsapp/webhook/waha' }),
+    ).resolves.toBeUndefined()
+    const paths = mock.mock.calls.map((c) => new URL(c[0] as string).pathname)
+    expect(paths).toEqual([
+      '/api/sessions',
+      '/api/sessions/s1/logout',
+      '/api/sessions/s1',
+      '/api/sessions',
+    ])
+  })
+
+  it('createSession propaga se o retry pós-limpeza também falhar', async () => {
+    const mock = fetch as ReturnType<typeof vi.fn>
+    mock
+      .mockResolvedValueOnce(new Response('{"message":"Session already exists"}', { status: 422 }))
+      .mockResolvedValueOnce(new Response('{}', { status: 200 })) // logout
+      .mockResolvedValueOnce(new Response('{}', { status: 200 })) // delete
+      .mockResolvedValueOnce(new Response('{"message":"boom"}', { status: 500 })) // retry falha
+    const { createSession } = await import('./waha-api')
+    await expect(
+      createSession({ session: 's1', webhookUrl: 'http://crm.local/api/whatsapp/webhook/waha' }),
+    ).rejects.toThrow(/500/)
   })
 })

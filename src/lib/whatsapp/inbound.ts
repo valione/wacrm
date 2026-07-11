@@ -406,6 +406,10 @@ export async function persistInboundMessage(
   normalized: NormalizedInboundMessage,
   accountId: string,
   configOwnerUserId: string,
+  // Janela de espera antes de re-consultar o dedupe de um eco fromMe cujo
+  // primeiro lookup não achou match (ver bloco fromMe abaixo). Injetável
+  // para testes; em produção usa o default de 3s.
+  echoDedupeRetryMs = 3000,
 ): Promise<void> {
   const senderPhone = normalizePhone(normalized.fromPhone)
   const contactName = normalized.contactName
@@ -452,18 +456,39 @@ export async function persistInboundMessage(
   // flows / automations / AI / message.received — an outbound echo is
   // not a customer trigger.
   if (normalized.fromMe) {
-    const { data: existingEcho, error: echoLookupError } = await supabaseAdmin()
-      .from('messages')
-      .select('id')
-      .eq('message_id', normalized.externalId)
-      .limit(1)
-      .maybeSingle()
+    const lookupEcho = async () =>
+      supabaseAdmin()
+        .from('messages')
+        .select('id')
+        .eq('message_id', normalized.externalId)
+        .limit(1)
+        .maybeSingle()
+
+    const { data: existingEcho, error: echoLookupError } = await lookupEcho()
 
     if (echoLookupError) {
       console.error('Error checking for echoed message:', echoLookupError)
       return
     }
     if (existingEcho) return // already persisted by the CRM send path
+
+    // Corrida do eco: quando o próprio CRM envia, a WAHA pode entregar o
+    // eco fromMe ANTES do INSERT do send path concluir a transação — o
+    // primeiro lookup por message_id não acha nada mas a linha está a
+    // caminho. Antes de inserir como agente (o que duplicaria o thread),
+    // aguardamos ~3s e re-consultamos uma vez. Só inserimos se, passada a
+    // janela, o send path ainda não gravou (eco genuíno de outro cliente:
+    // celular/WhatsApp Web). Estamos dentro de after(), então essa espera
+    // não bloqueia a resposta 200 ao webhook.
+    if (echoDedupeRetryMs > 0) {
+      await new Promise((r) => setTimeout(r, echoDedupeRetryMs))
+      const { data: recheckedEcho, error: recheckError } = await lookupEcho()
+      if (recheckError) {
+        console.error('Error re-checking for echoed message:', recheckError)
+        return
+      }
+      if (recheckedEcho) return // send path finished the INSERT during the wait
+    }
 
     const { error: echoMsgError } = await supabaseAdmin().from('messages').insert({
       conversation_id: conversation.id,
