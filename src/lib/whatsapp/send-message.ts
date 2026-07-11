@@ -22,9 +22,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import {
-  sendTextMessage,
   sendTemplateMessage,
-  sendMediaMessage,
   sendInteractiveButtons,
   sendInteractiveList,
   type MediaKind,
@@ -44,6 +42,7 @@ import {
 } from '@/lib/whatsapp/phone-utils';
 import type { MessageTemplate } from '@/types';
 import { isMessageTemplate } from '@/lib/whatsapp/template-row-guard';
+import { resolveProvider } from '@/lib/whatsapp/providers/resolve';
 
 export const MEDIA_KINDS = ['image', 'video', 'document', 'audio'] as const;
 export const VALID_MESSAGE_TYPES = [
@@ -262,10 +261,14 @@ export async function sendMessageToConversation(
     );
   }
 
-  const accessToken = decrypt(config.access_token);
+  // Only Meta stores an encrypted access token — WAHA auth lives with
+  // the linked session, not this row. Decrypting only for Meta keeps
+  // `decrypt()`'s existing (uncaught) throw-on-corruption behaviour
+  // intact for Meta accounts, while WAHA accounts never touch it.
+  const accessToken = config.provider === 'waha' ? null : decrypt(config.access_token);
 
   // Self-heal legacy CBC ciphertexts. Fire-and-forget; idempotent.
-  if (isLegacyFormat(config.access_token)) {
+  if (accessToken !== null && isLegacyFormat(config.access_token)) {
     void db
       .from('whatsapp_config')
       .update({ access_token: encrypt(accessToken) })
@@ -278,6 +281,23 @@ export async function sendMessageToConversation(
           );
         }
       });
+  }
+
+  const provider = resolveProvider(config, accessToken);
+
+  if (!provider.capabilities.supportsTemplates && messageType === 'template') {
+    throw new SendMessageError(
+      'unsupported_by_provider',
+      'Contas conectadas via WAHA não usam templates — envie texto livre.',
+      422
+    );
+  }
+  if (!provider.capabilities.supportsInteractive && messageType === 'interactive') {
+    throw new SendMessageError(
+      'unsupported_by_provider',
+      'Mensagens interativas não são suportadas pelo provedor WAHA.',
+      422
+    );
   }
 
   // Resolve the reply target to its Meta message_id. The parent must
@@ -331,9 +351,11 @@ export async function sendMessageToConversation(
 
   const attempt = async (phone: string): Promise<string> => {
     if (messageType === 'template') {
+      // Only reachable for Meta — the capability guard above rejects
+      // `template` for providers without `supportsTemplates`.
       const result = await sendTemplateMessage({
-        phoneNumberId: config.phone_number_id,
-        accessToken,
+        phoneNumberId: config.phone_number_id!,
+        accessToken: accessToken!,
         to: phone,
         templateName: templateName!,
         language: templateLanguage || 'en_US',
@@ -345,24 +367,24 @@ export async function sendMessageToConversation(
       return result.messageId;
     }
     if (isMediaKind) {
-      const result = await sendMediaMessage({
-        phoneNumberId: config.phone_number_id,
-        accessToken,
+      const result = await provider.sendMedia({
         to: phone,
         kind: messageType as MediaKind,
-        link: mediaUrl!,
+        mediaUrl: mediaUrl!,
         caption: contentText || undefined,
         filename: filename || undefined,
-        contextMessageId,
+        replyToExternalId: contextMessageId,
       });
       return result.messageId;
     }
     if (messageType === 'interactive') {
+      // Only reachable for Meta — the capability guard above rejects
+      // `interactive` for providers without `supportsInteractive`.
       const p = interactivePayload!;
       if (p.kind === 'buttons') {
         const result = await sendInteractiveButtons({
-          phoneNumberId: config.phone_number_id,
-          accessToken,
+          phoneNumberId: config.phone_number_id!,
+          accessToken: accessToken!,
           to: phone,
           bodyText: p.body,
           headerText: p.header || undefined,
@@ -373,8 +395,8 @@ export async function sendMessageToConversation(
         return result.messageId;
       }
       const result = await sendInteractiveList({
-        phoneNumberId: config.phone_number_id,
-        accessToken,
+        phoneNumberId: config.phone_number_id!,
+        accessToken: accessToken!,
         to: phone,
         bodyText: p.body,
         buttonLabel: p.button_label,
@@ -385,12 +407,10 @@ export async function sendMessageToConversation(
       });
       return result.messageId;
     }
-    const result = await sendTextMessage({
-      phoneNumberId: config.phone_number_id,
-      accessToken,
+    const result = await provider.sendText({
       to: phone,
       text: contentText!,
-      contextMessageId,
+      replyToExternalId: contextMessageId,
     });
     return result.messageId;
   };
