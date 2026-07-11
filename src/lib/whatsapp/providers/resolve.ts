@@ -2,6 +2,7 @@ import type { WhatsAppConfig } from '@/types'
 import type { WhatsAppProvider } from './types'
 import { metaProvider } from './meta'
 import { wahaProvider } from './waha'
+import { uazapiProvider } from './uazapi'
 
 export type { WhatsAppProvider, ProviderCapabilities } from './types'
 export { CAPABILITIES } from './types'
@@ -18,6 +19,11 @@ export function resolveProvider(
   if (config.provider === 'waha') {
     if (!config.provider_session) throw new Error('Config WAHA sem sessão WAHA vinculada — reconecte pelo QR Code.')
     return wahaProvider(config.provider_session)
+  }
+  if (config.provider === 'uazapi') {
+    if (!config.provider_session) throw new Error('Config Uazapi sem instância vinculada — reconecte pelo QR Code.')
+    if (!accessToken) throw new Error('Config Uazapi sem token de instância descriptografado.')
+    return uazapiProvider(accessToken)
   }
   if (!config.phone_number_id) throw new Error('Config Meta sem phone_number_id.')
   if (!accessToken) throw new Error('Config Meta sem access token descriptografado.')

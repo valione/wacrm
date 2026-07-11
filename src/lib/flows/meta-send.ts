@@ -13,7 +13,7 @@ import {
   phoneVariants,
   isRecipientNotAllowedError,
 } from '@/lib/whatsapp/phone-utils'
-import { resolveProvider } from '@/lib/whatsapp/providers/resolve'
+import { resolveProvider, CAPABILITIES } from '@/lib/whatsapp/providers/resolve'
 import { supabaseAdmin } from './admin-client'
 
 // ------------------------------------------------------------
@@ -350,7 +350,11 @@ async function sendInteractiveViaMeta(
     throw new Error('WhatsApp not configured for this account')
   }
 
-  if (config.provider === 'waha') {
+  // Interactive nodes are Meta-only in v1 — gate on capability rather
+  // than a hardcoded provider name so this keeps working correctly as
+  // more non-Meta providers (WAHA, Uazapi) are added.
+  const caps = CAPABILITIES[config.provider as 'meta' | 'waha' | 'uazapi'] ?? CAPABILITIES.meta
+  if (!caps.supportsInteractive) {
     throw new Error('nó interativo não suportado em conta WAHA (fallback chega na fase 3)')
   }
 

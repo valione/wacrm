@@ -26,4 +26,33 @@ describe('resolveProvider', () => {
     expect(() => resolveProvider({ provider: 'waha', phone_number_id: null, provider_session: null }, null))
       .toThrow(/sessão WAHA/)
   })
+
+  it('uazapi: resolve com reações suportadas e resto desligado', async () => {
+    const { resolveProvider } = await import('./resolve')
+    const p = resolveProvider(
+      { provider: 'uazapi', phone_number_id: null, provider_session: 'wacrm_a1' },
+      'instance-token',
+    )
+    expect(p.name).toBe('uazapi')
+    expect(p.capabilities).toMatchObject({
+      supportsTemplates: false,
+      has24hWindow: false,
+      supportsInteractive: false,
+      supportsReactions: true,
+    })
+  })
+
+  it('uazapi sem provider_session lança erro claro', async () => {
+    const { resolveProvider } = await import('./resolve')
+    expect(() =>
+      resolveProvider({ provider: 'uazapi', phone_number_id: null, provider_session: null }, 'instance-token'),
+    ).toThrow(/instância vinculada/)
+  })
+
+  it('uazapi sem accessToken lança erro claro', async () => {
+    const { resolveProvider } = await import('./resolve')
+    expect(() =>
+      resolveProvider({ provider: 'uazapi', phone_number_id: null, provider_session: 'wacrm_a1' }, null),
+    ).toThrow(/token de instância/)
+  })
 })

@@ -1,8 +1,10 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { sendReactionMessage } from '@/lib/whatsapp/meta-api';
+import { uazapiSendReaction } from '@/lib/whatsapp/uazapi-api';
 import { decrypt } from '@/lib/whatsapp/encryption';
 import { sanitizePhoneForMeta } from '@/lib/whatsapp/phone-utils';
+import { CAPABILITIES } from '@/lib/whatsapp/providers/resolve';
 import {
   checkRateLimit,
   rateLimitResponse,
@@ -111,7 +113,7 @@ export async function POST(request: Request) {
     // WhatsApp config + access token. Account-scoped post-multi-user.
     const { data: config, error: configError } = await supabase
       .from('whatsapp_config')
-      .select('phone_number_id, access_token, provider')
+      .select('phone_number_id, access_token, provider, provider_session')
       .eq('account_id', accountId)
       .single();
 
@@ -122,15 +124,19 @@ export async function POST(request: Request) {
       );
     }
 
-    // Reactions are a Meta-only capability. A WAHA account stores the
-    // sentinel 'waha' in access_token, so decrypting it below would throw
-    // and surface as a generic 500. Bail out with a clear 422 BEFORE the
-    // decrypt (same `unsupported_by_provider` pattern the send path uses).
-    if (config.provider === 'waha') {
+    // Reactions aren't supported by every provider. A WAHA account stores
+    // the sentinel 'waha' in access_token, so decrypting it below would
+    // throw and surface as a generic 500. Bail out with a clear 422 BEFORE
+    // the decrypt (same `unsupported_by_provider` pattern the send path
+    // uses), gated on capability rather than a hardcoded provider name so
+    // adding a provider only means updating CAPABILITIES.
+    const caps =
+      CAPABILITIES[config.provider as 'meta' | 'waha' | 'uazapi'] ?? CAPABILITIES.meta;
+    if (!caps.supportsReactions) {
       return NextResponse.json(
         {
           error: 'unsupported_by_provider',
-          message: 'Reações não são suportadas em contas conectadas via WAHA.',
+          message: 'Reações não são suportadas pelo provedor conectado.',
         },
         { status: 422 },
       );
@@ -139,22 +145,41 @@ export async function POST(request: Request) {
     const accessToken = decrypt(config.access_token);
     const sanitizedPhone = sanitizePhoneForMeta(contact.phone);
 
-    try {
-      await sendReactionMessage({
-        phoneNumberId: config.phone_number_id,
-        accessToken,
-        to: sanitizedPhone,
-        targetMessageId: targetMessage.message_id,
-        emoji,
-      });
-    } catch (err) {
-      const message =
-        err instanceof Error ? err.message : 'Unknown Meta API error';
-      console.error('[whatsapp/react] Meta send failed:', message);
-      return NextResponse.json(
-        { error: `Meta API error: ${message}` },
-        { status: 502 },
-      );
+    if (config.provider === 'uazapi') {
+      try {
+        await uazapiSendReaction({
+          token: accessToken,
+          number: sanitizedPhone,
+          messageId: targetMessage.message_id,
+          emoji,
+        });
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : 'Unknown Uazapi API error';
+        console.error('[whatsapp/react] Uazapi send failed:', message);
+        return NextResponse.json(
+          { error: `Uazapi API error: ${message}` },
+          { status: 502 },
+        );
+      }
+    } else {
+      try {
+        await sendReactionMessage({
+          phoneNumberId: config.phone_number_id,
+          accessToken,
+          to: sanitizedPhone,
+          targetMessageId: targetMessage.message_id,
+          emoji,
+        });
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : 'Unknown Meta API error';
+        console.error('[whatsapp/react] Meta send failed:', message);
+        return NextResponse.json(
+          { error: `Meta API error: ${message}` },
+          { status: 502 },
+        );
+      }
     }
 
     // Mirror into DB. Empty emoji = removal.
