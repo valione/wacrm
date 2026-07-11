@@ -13,14 +13,19 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 
+/** Comparison operator for the `custom_field` audience type. Defaults to `'is'` when omitted. */
+export type CustomFieldOperator = 'is' | 'is_not' | 'contains'
+
 /** Body shape accepted by `POST /api/whatsapp/broadcasts` for `audience`. */
 export interface AudienceInput {
   type: 'all' | 'tags' | 'custom_field' | 'contact_ids'
   tagIds?: string[]
   excludeTagIds?: string[]
-  /** `custom_fields.id` — equality match only (server-side has no is/is_not/contains operator). */
+  /** `custom_fields.id`. */
   field?: string
   value?: string
+  /** `'is'` (default) | `'is_not'` | `'contains'` — mirrors the wizard's step 2 operator. */
+  operator?: CustomFieldOperator
   contactIds?: string[]
 }
 
@@ -76,20 +81,36 @@ async function resolveTagsAudience(
   return contactIdsInAccount(db, accountId, candidateIds)
 }
 
+/**
+ * Mirrors `resolveCustomFieldAudience` in src/hooks/use-broadcast-sending.ts
+ * (~lines 290-321): same table, same operator → eq/neq/ilike mapping, so
+ * the two paths produce identical result sets — including the fact that
+ * `is_not`/`contains` only ever match contacts that actually have a
+ * `contact_custom_values` row for this field. A contact with no row at
+ * all for the field is excluded by every operator, not just `is` — this
+ * is a plain filter over that table, not a `NOT EXISTS` join, and the
+ * client-side estimate the user saw in step 2 has the same behavior.
+ */
 async function resolveCustomFieldAudience(
   db: SupabaseClient,
   accountId: string,
   field: string | undefined,
   value: string | undefined,
+  operator: CustomFieldOperator | undefined,
 ): Promise<string[]> {
   if (!field || value === undefined) {
     throw new AudienceError("audience.type 'custom_field' exige 'field' e 'value'.")
   }
-  const { data, error } = await db
+  let query = db
     .from('contact_custom_values')
     .select('contact_id')
     .eq('custom_field_id', field)
-    .eq('value', value)
+
+  if (operator === 'is_not') query = query.neq('value', value)
+  else if (operator === 'contains') query = query.ilike('value', `%${value}%`)
+  else query = query.eq('value', value) // default: 'is'
+
+  const { data, error } = await query
   if (error) throw new AudienceError(`Falha ao filtrar por campo personalizado: ${error.message}`)
   const candidateIds = (data ?? []).map((row) => row.contact_id as string)
   return contactIdsInAccount(db, accountId, candidateIds)
@@ -147,7 +168,13 @@ export async function resolveAudienceServer(
       ids = await resolveTagsAudience(db, accountId, audience.tagIds)
       break
     case 'custom_field':
-      ids = await resolveCustomFieldAudience(db, accountId, audience.field, audience.value)
+      ids = await resolveCustomFieldAudience(
+        db,
+        accountId,
+        audience.field,
+        audience.value,
+        audience.operator,
+      )
       break
     case 'contact_ids':
       ids = await resolveContactIdsAudience(db, accountId, audience.contactIds)

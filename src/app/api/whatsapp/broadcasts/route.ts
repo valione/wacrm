@@ -117,6 +117,13 @@ export async function POST(request: Request) {
   if (!audience || typeof audience !== 'object' || typeof audience.type !== 'string') {
     return badRequest("'audience' é obrigatório e precisa de um 'type' válido.")
   }
+  if (
+    audience.type === 'custom_field' &&
+    audience.operator !== undefined &&
+    !['is', 'is_not', 'contains'].includes(audience.operator as string)
+  ) {
+    return badRequest("'audience.operator' deve ser 'is', 'is_not' ou 'contains'.")
+  }
 
   const admin = supabaseAdmin()
 

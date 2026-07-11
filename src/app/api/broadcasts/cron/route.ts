@@ -4,7 +4,10 @@ import { runBroadcastTick } from '@/lib/broadcasts/processor'
 /**
  * Drain due/in-flight broadcasts. Meant to be hit on a schedule (Vercel
  * Cron / external pinger) — requires a shared secret via the
- * `x-cron-secret` header to match `BROADCAST_CRON_SECRET`. Auth skeleton
+ * `x-cron-secret` header to match `AUTOMATION_CRON_SECRET`. Reuses the
+ * same env as src/app/api/flows/cron/route.ts and
+ * src/app/api/automations/cron/route.ts so operators only provision one
+ * secret and just add this URL to the existing pinger. Auth skeleton
  * mirrors src/app/api/automations/cron/route.ts (503 unconfigured, 401
  * on mismatch).
  *
@@ -15,7 +18,7 @@ import { runBroadcastTick } from '@/lib/broadcasts/processor'
 export const maxDuration = 60
 
 export async function GET(request: Request) {
-  const expected = process.env.BROADCAST_CRON_SECRET
+  const expected = process.env.AUTOMATION_CRON_SECRET
   if (!expected) {
     return NextResponse.json({ error: 'cron not configured' }, { status: 503 })
   }

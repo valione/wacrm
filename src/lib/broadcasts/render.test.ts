@@ -24,4 +24,13 @@ describe('renderBroadcastText', () => {
   it('chaves não fechadas não explodem', () => {
     expect(renderBroadcastText('Oi {{nome', { name: 'X' })).toBe('Oi {{nome')
   })
+  it('substitui chave de campo personalizado com espaço', () => {
+    expect(renderBroadcastText('Nascido em {{data de nascimento}}', {
+      name: 'Ana', customValues: { 'data de nascimento': '01/01/1990' },
+    })).toBe('Nascido em 01/01/1990')
+  })
+  it('chave com espaço sem valor vira string vazia', () => {
+    expect(renderBroadcastText('Nascido em {{data de nascimento}}', { name: 'Ana' }))
+      .toBe('Nascido em ')
+  })
 })

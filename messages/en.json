@@ -664,7 +664,7 @@
         "cancel": "Cancel broadcast",
         "confirmCancel": "Cancel this broadcast? Pending recipients will not be sent.",
         "actionError": "Something went wrong. Please try again.",
-        "stalledBanner": "No progress for several minutes — check the cron configuration (docs/automations-and-cron.md).",
+        "stalledBanner": "No progress for a few minutes — make sure a scheduler is pinging /api/broadcasts/cron every minute.",
         "success": {
           "pause": "Broadcast paused",
           "resume": "Broadcast resumed",

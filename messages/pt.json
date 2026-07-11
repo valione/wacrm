@@ -664,7 +664,7 @@
         "cancel": "Cancelar transmissão",
         "confirmCancel": "Cancelar esta transmissão? Os destinatários pendentes não receberão a mensagem.",
         "actionError": "Algo deu errado. Tente novamente.",
-        "stalledBanner": "Sem progresso há alguns minutos — verifique a configuração do cron (docs/automations-and-cron.md).",
+        "stalledBanner": "Sem progresso há alguns minutos — verifique se um agendador está chamando /api/broadcasts/cron a cada minuto.",
         "success": {
           "pause": "Transmissão pausada",
           "resume": "Transmissão retomada",

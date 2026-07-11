@@ -32,7 +32,9 @@ interface VariableMapping {
 }
 
 // Same placeholder grammar as src/lib/broadcasts/render.ts — keep in sync.
-const PLACEHOLDER_RE = /\{\{\s*([\wÀ-ſ]+)\s*\}\}/g;
+// Field names are free text (can contain spaces, e.g. "data de
+// nascimento"), so only the brace characters are excluded from the key.
+const PLACEHOLDER_RE = /\{\{\s*([^{}]+?)\s*\}\}/g;
 
 interface Step3TemplateProps {
   template: MessageTemplate;
@@ -563,7 +565,7 @@ function Step3FreeTextReview({
   const placeholders = useMemo<DetectedPlaceholder[]>(() => {
     const seen = new Map<string, DetectedPlaceholder>();
     for (const match of content.matchAll(PLACEHOLDER_RE)) {
-      const raw = match[1];
+      const raw = match[1].trim();
       const key = raw.toLowerCase();
       if (seen.has(key)) continue;
       const isContact = key === 'nome' || key === 'name';

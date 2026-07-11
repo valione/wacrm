@@ -36,8 +36,10 @@ type WizardAudience = {
  * Map the wizard's audience shape to the server contract of
  * POST /api/whatsapp/broadcasts. CSV rows are upserted to contacts in the
  * browser (as the immediate-send hook already does) and passed as
- * `contact_ids`. The server-side custom-field filter is equality-only, so
- * the operator is not carried over.
+ * `contact_ids`. The custom-field operator (is/is_not/contains) is carried
+ * over as-is — `resolveAudienceServer` implements all three, mirroring
+ * `resolveCustomFieldAudience` in use-broadcast-sending.ts, so the
+ * audience the server resolves matches the estimate step 2 showed.
  */
 async function toServerAudience(
   audience: WizardAudience,
@@ -56,6 +58,7 @@ async function toServerAudience(
         type: 'custom_field',
         field: audience.customField?.fieldId,
         value: audience.customField?.value,
+        operator: audience.customField?.operator,
         excludeTagIds,
       };
     case 'csv': {
