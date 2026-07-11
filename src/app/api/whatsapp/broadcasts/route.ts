@@ -209,12 +209,12 @@ export async function POST(request: Request) {
       audience_filter: audience,
       scheduled_at: scheduledAt,
       status: scheduledAt ? 'scheduled' : 'sending',
+      // total_recipients is NOT derived by the counts trigger
+      // (migrations 003/005 only maintain sent/delivered/read/replied/
+      // failed) — it's ours to stamp. Those five derived counters are
+      // deliberately omitted: the DEFAULT 0 from migration 001 covers
+      // them and the plan forbids writing them from app code.
       total_recipients: contactIds.length,
-      sent_count: 0,
-      delivered_count: 0,
-      read_count: 0,
-      replied_count: 0,
-      failed_count: 0,
     })
     .select('id')
     .single()
@@ -235,12 +235,18 @@ export async function POST(request: Request) {
     const { error: recipientError } = await admin.from('broadcast_recipients').insert(batch)
     if (recipientError) {
       console.error('[whatsapp/broadcasts POST] insert de broadcast_recipients falhou:', recipientError)
-      // Mirrors use-broadcast-sending.ts: flip to failed rather than
-      // leave an incomplete recipient set behind a 'sending'/'scheduled' row.
-      await admin
-        .from('broadcasts')
-        .update({ status: 'failed', failed_count: contactIds.length })
-        .eq('id', broadcast.id)
+      // Flip to failed rather than leave an incomplete recipient set
+      // behind a 'sending'/'scheduled' row. Counts stay with the DB:
+      // earlier batches may have inserted 'pending' rows successfully,
+      // so hand reconciliation to the safety-net function from
+      // migration 003/005 instead of guessing failed_count here.
+      await admin.from('broadcasts').update({ status: 'failed' }).eq('id', broadcast.id)
+      const { error: recomputeError } = await admin.rpc('recompute_broadcast_counts', {
+        bid: broadcast.id,
+      })
+      if (recomputeError) {
+        console.error('[whatsapp/broadcasts POST] recompute_broadcast_counts falhou:', recomputeError)
+      }
       return NextResponse.json({ error: 'Failed to create broadcast recipients' }, { status: 500 })
     }
   }
