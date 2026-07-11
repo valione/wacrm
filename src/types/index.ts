@@ -187,7 +187,13 @@ export interface Conversation {
 // Notifications (migration 027)
 // ============================================================
 
-export type NotificationType = 'conversation_assigned';
+// Kept in lockstep with the DB CHECK (notifications_type_check),
+// widened by migrations 037 ('whatsapp_disconnected') and 039
+// ('broadcast_finished').
+export type NotificationType =
+  | 'conversation_assigned'
+  | 'whatsapp_disconnected'
+  | 'broadcast_finished';
 
 export interface Notification {
   id: string;
