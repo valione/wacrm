@@ -1,4 +1,4 @@
-import { sendTextMessage, sendTemplateMessage } from '@/lib/whatsapp/meta-api'
+import { sendTemplateMessage } from '@/lib/whatsapp/meta-api'
 import type { InteractiveMessagePayload } from '@/lib/whatsapp/interactive'
 import {
   engineSendInteractiveButtons,
@@ -11,6 +11,7 @@ import {
   phoneVariants,
   isRecipientNotAllowedError,
 } from '@/lib/whatsapp/phone-utils'
+import { resolveProvider } from '@/lib/whatsapp/providers/resolve'
 import { supabaseAdmin } from './admin-client'
 
 // ------------------------------------------------------------
@@ -140,13 +141,18 @@ async function sendViaMeta(input: SendInput): Promise<{ whatsapp_message_id: str
     throw new Error('WhatsApp not configured for this account')
   }
 
-  const accessToken = decrypt(config.access_token)
+  const accessToken = config.provider === 'waha' ? null : decrypt(config.access_token)
+  const provider = resolveProvider(config, accessToken)
+
+  if (input.kind === 'template' && !provider.capabilities.supportsTemplates) {
+    throw new Error('automação com template não suportada em conta WAHA — use um passo de texto')
+  }
 
   const attempt = async (phone: string): Promise<string> => {
     if (input.kind === 'template') {
       const r = await sendTemplateMessage({
         phoneNumberId: config.phone_number_id,
-        accessToken,
+        accessToken: accessToken!,
         to: phone,
         templateName: input.templateName,
         language: input.language,
@@ -154,12 +160,7 @@ async function sendViaMeta(input: SendInput): Promise<{ whatsapp_message_id: str
       })
       return r.messageId
     }
-    const r = await sendTextMessage({
-      phoneNumberId: config.phone_number_id,
-      accessToken,
-      to: phone,
-      text: input.text,
-    })
+    const r = await provider.sendText({ to: phone, text: input.text })
     return r.messageId
   }
 
