@@ -83,6 +83,20 @@ describe('uazapi-api', () => {
     expect(r).toEqual({ status: 'disconnected', qrcode: null, phone: null, loggedIn: false })
   })
 
+  it('isGoneError reconhece só erros 401/404 do uazapiFetch (instância morta)', async () => {
+    const { isGoneError } = await import('./uazapi-api')
+    expect(isGoneError(new Error('Uazapi /instance/status falhou: 401 {"error":"instance info not found"}'))).toBe(true)
+    expect(isGoneError(new Error('Uazapi /instance/status falhou: 404 not found'))).toBe(true)
+    // Instabilidade do servidor NÃO é instância morta — não pode disparar
+    // limpeza destrutiva de config no ramo de reconexão.
+    expect(isGoneError(new Error('Uazapi /instance/status falhou: 500 internal'))).toBe(false)
+    expect(isGoneError(new Error('Uazapi /instance/status falhou: 503 unavailable'))).toBe(false)
+    expect(isGoneError(new TypeError('fetch failed'))).toBe(false)
+    expect(isGoneError('não é Error')).toBe(false)
+    // Números soltos no corpo do erro não podem enganar a detecção.
+    expect(isGoneError(new Error('Uazapi /send/text falhou: 500 code 401 in body'))).toBe(false)
+  })
+
   it('disconnectInstance tolera 401/404 (instância já expirada/apagada)', async () => {
     const mock = fetch as ReturnType<typeof vi.fn>
     mock.mockResolvedValue(new Response('{"error":"not found"}', { status: 404 }))

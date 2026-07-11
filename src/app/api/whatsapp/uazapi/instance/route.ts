@@ -26,6 +26,7 @@ import {
   disconnectInstance,
   deleteInstance,
   setInstanceWebhook,
+  isGoneError,
 } from '@/lib/whatsapp/uazapi-api'
 
 /** `data:image/png;base64,...` pronto pro `<img src>` — a Uazapi às vezes manda o base64 cru. */
@@ -81,15 +82,36 @@ export async function POST() {
     let savedToken: string | null = null
     try {
       savedToken = decrypt(existing.access_token)
-      await getInstanceStatus({ token: savedToken })
     } catch (err) {
-      // Token corrompido OU instância morta (o demo server apaga em 1h) —
-      // nos dois casos não há nada reaproveitável: limpa e recria do zero.
-      console.error(
-        '[uazapi/instance POST] instância salva não responde, recriando do zero:',
-        err,
-      )
-      if (savedToken) await deleteInstance({ token: savedToken }).catch(() => {})
+      // Token irrecuperável (ENCRYPTION_KEY mudou/divergente) — nunca mais
+      // conseguiremos falar com essa instância; nada reaproveitável.
+      console.error('[uazapi/instance POST] decrypt do token salvo falhou, recriando do zero:', err)
+    }
+
+    if (savedToken) {
+      try {
+        await getInstanceStatus({ token: savedToken })
+      } catch (err) {
+        // Só 401/404 significam instância morta (expirada/apagada — o demo
+        // server apaga em 1h). Rede fora, 5xx, timeout etc. NÃO autorizam a
+        // limpeza destrutiva: durante uma instabilidade do servidor a config
+        // pode estar perfeitamente saudável — devolve erro e não toca nada.
+        if (!isGoneError(err)) {
+          console.error('[uazapi/instance POST] getInstanceStatus (reconexão) falhou sem indicar instância morta:', err)
+          return NextResponse.json(
+            { error: 'uazapi_unreachable', message: 'Servidor Uazapi indisponível — tente novamente.' },
+            { status: 502 },
+          )
+        }
+        console.error('[uazapi/instance POST] instância salva morta (401/404), recriando do zero:', err)
+        await deleteInstance({ token: savedToken }).catch(() => {})
+        savedToken = null
+      }
+    }
+
+    if (!savedToken) {
+      // Instância morta ou token irrecuperável: apaga a config-fantasma e
+      // cai para a criação nova abaixo.
       const { error: cleanupError } = await supabaseAdmin()
         .from('whatsapp_config')
         .delete()
@@ -98,7 +120,6 @@ export async function POST() {
       if (cleanupError) {
         console.error('[uazapi/instance POST] limpeza de config-fantasma falhou:', cleanupError)
       }
-      savedToken = null
     }
 
     if (savedToken) {

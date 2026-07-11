@@ -47,12 +47,25 @@ async function uazapiFetch(
   return response
 }
 
+/**
+ * Erro do uazapiFetch que indica instância morta (401 = token
+ * expirado/inválido, 404 = instância apagada — o demo server apaga em 1h).
+ * Ancorado no prefixo `falhou: <status>` que o próprio uazapiFetch monta,
+ * para um "401"/"404" solto dentro do corpo do erro não gerar falso
+ * positivo. Erros de rede/5xx retornam false — o call site NÃO deve
+ * tratá-los como instância morta (ver ramo de reconexão da rota de
+ * instância, que só faz limpeza destrutiva quando isto retorna true).
+ */
+export function isGoneError(err: unknown): boolean {
+  return err instanceof Error && /falhou: (401|404)\b/.test(err.message)
+}
+
 /** Tolera 401/404: instância expirada ou já apagada (o demo server apaga em 1h). */
 async function tolerate401or404(fn: () => Promise<Response>): Promise<void> {
   try {
     await fn()
   } catch (err) {
-    if (!(err instanceof Error && /: (401|404)\b/.test(err.message))) throw err
+    if (!isGoneError(err)) throw err
   }
 }
 
