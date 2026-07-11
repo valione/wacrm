@@ -50,6 +50,15 @@ const TICK_MS_BUDGET = 60_000
 /** Recipients claimed more than this ago are considered stale (a prior
  * tick crashed mid-send) and may be re-claimed. */
 const CLAIM_STALE_MS = 5 * 60 * 1000
+/**
+ * Global wall-clock deadline for one tick. The per-account budget alone
+ * doesn't bound the tick: N active accounts × rate × ~2s each can blow
+ * past the route's maxDuration=60, and a platform kill mid-send widens
+ * the post-send duplication window. We stop starting new broadcasts
+ * past this mark and return a partial tick; the rest waits for the next
+ * one (rotation via updated_at ordering prevents starvation).
+ */
+const TICK_DEADLINE_MS = 45_000
 
 // ---------- Pure helpers (unit-tested) ----------
 
@@ -76,6 +85,19 @@ export function isBroadcastComplete(counts: { pending: number }): boolean {
 /** Terminal status: any success → 'sent'; nothing sent → 'failed'. */
 export function finalStatus(counts: { sentCount: number }): 'sent' | 'failed' {
   return counts.sentCount > 0 ? 'sent' : 'failed'
+}
+
+/**
+ * True once the tick has burned through its global wall-clock budget
+ * ({@link TICK_DEADLINE_MS} by default) and must stop starting new
+ * broadcasts, returning a partial result.
+ */
+export function tickDeadlineExceeded(
+  startedAtMs: number,
+  nowMs: number,
+  deadlineMs: number = TICK_DEADLINE_MS,
+): boolean {
+  return nowMs - startedAtMs > deadlineMs
 }
 
 // ---------- Internals ----------
@@ -417,11 +439,21 @@ async function processBroadcast(
     return { processed: 0, completed }
   }
 
+  // The claimed_at predicate below is the ACTUAL lock — do not remove
+  // it. `status='pending'` alone cannot exclude a concurrent tick,
+  // because this UPDATE does not change status: tick B re-evaluates the
+  // WHERE on the row tick A just claimed, sees status still 'pending',
+  // and would win the SAME ids → duplicate sends. Re-checking the field
+  // the UPDATE itself mutates (claimed_at, unset or stale) makes B's
+  // predicate false on A's freshly-claimed rows, so B gets zero rows.
+  // (Contrast with the activation UPDATE, whose guard `status='scheduled'`
+  // is consumed by the status change itself.)
   const { data: claimedRows } = await admin
     .from('broadcast_recipients')
     .update({ claimed_at: new Date().toISOString() })
     .in('id', eligibleIds)
     .eq('status', 'pending')
+    .or(`claimed_at.is.null,claimed_at.lt.${staleBefore}`)
     .select('id, contact_id')
 
   const claimed = (claimedRows ?? []) as { id: string; contact_id: string | null }[]
@@ -489,30 +521,54 @@ export async function runBroadcastTick(): Promise<{ activated: number; processed
     .select('id')
   const activated = activatedRows?.length ?? 0
 
-  // 2. SELEÇÃO.
+  // 2. SELEÇÃO — updated_at asc rotates the queue: broadcasts processed
+  // in one tick get their updated_at bumped below, sending them to the
+  // back of the line so a partial (deadline-cut) tick never starves the
+  // tail on the next run.
   const { data: sending } = await admin
     .from('broadcasts')
     .select(
       'id, account_id, user_id, name, template_name, template_language, template_variables, content_text, content_media_url, content_media_type',
     )
     .eq('status', 'sending')
-    .order('created_at', { ascending: true })
+    .order('updated_at', { ascending: true })
 
+  const startedAt = Date.now()
   let processed = 0
   let completed = 0
   // Remaining send budget per account this tick.
   const remaining = new Map<string, number>()
 
   for (const row of (sending ?? []) as SendingBroadcast[]) {
+    // Global deadline: the per-account budget alone doesn't bound the
+    // tick when several accounts are active. Return partial; leftovers
+    // wait for the next tick.
+    if (tickDeadlineExceeded(startedAt, Date.now())) break
+
     const left = remaining.get(row.account_id) ?? perAccountBudget
     if (left <= 0) {
       // Account already spent its budget on an earlier broadcast.
       continue
     }
-    const { processed: sent, completed: done } = await processBroadcast(admin, row, left)
+    // Shrink the slice to what still fits before the deadline (~2s per
+    // send), so one broadcast's slice can't sail past it either.
+    const timeLeftMs = TICK_DEADLINE_MS - (Date.now() - startedAt)
+    const claimLimit = Math.min(left, sliceBudget(left, timeLeftMs))
+
+    const { processed: sent, completed: done } = await processBroadcast(admin, row, claimLimit)
     remaining.set(row.account_id, left - sent)
     processed += sent
-    if (done) completed++
+    if (done) {
+      completed++
+    } else {
+      // Rotate: bump updated_at so this broadcast queues behind the
+      // ones this tick didn't reach.
+      await admin
+        .from('broadcasts')
+        .update({ updated_at: new Date().toISOString() })
+        .eq('id', row.id)
+        .eq('status', 'sending')
+    }
   }
 
   return { activated, processed, completed }

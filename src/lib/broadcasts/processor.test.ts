@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest'
-import { sliceBudget, jitterMs, isBroadcastComplete, finalStatus } from './processor'
+import {
+  sliceBudget,
+  jitterMs,
+  isBroadcastComplete,
+  finalStatus,
+  tickDeadlineExceeded,
+} from './processor'
 
 describe('sliceBudget', () => {
   it('usa o rate default 10 quando o tempo não é o gargalo', () => {
@@ -41,6 +47,24 @@ describe('isBroadcastComplete', () => {
   it('não é completa enquanto houver pendentes', () => {
     expect(isBroadcastComplete({ pending: 1 })).toBe(false)
     expect(isBroadcastComplete({ pending: 42 })).toBe(false)
+  })
+})
+
+describe('tickDeadlineExceeded', () => {
+  it('não excede dentro do orçamento global (default 45s)', () => {
+    expect(tickDeadlineExceeded(0, 0)).toBe(false)
+    expect(tickDeadlineExceeded(0, 44_999)).toBe(false)
+    expect(tickDeadlineExceeded(0, 45_000)).toBe(false) // limite exato ainda cabe
+  })
+
+  it('excede passado o orçamento', () => {
+    expect(tickDeadlineExceeded(0, 45_001)).toBe(true)
+    expect(tickDeadlineExceeded(1_000, 100_000)).toBe(true)
+  })
+
+  it('respeita um deadline customizado', () => {
+    expect(tickDeadlineExceeded(0, 500, 1_000)).toBe(false)
+    expect(tickDeadlineExceeded(0, 1_001, 1_000)).toBe(true)
   })
 })
 
