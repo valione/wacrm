@@ -1508,6 +1508,7 @@
       "disconnect": "Disconnect",
       "disconnecting": "Disconnecting…",
       "disconnectConfirm": "Disconnect this number? Conversations and contacts are kept.",
+      "disconnectFailed": "Could not disconnect. Check the WAHA server and try again.",
       "sessionDown": "Session is not active — reconnect via QR Code.",
       "serverUnreachable": "WAHA server unreachable — check the WAHA_URL environment variable.",
       "switchBlocked": "Disconnect the current provider before switching.",

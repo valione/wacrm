@@ -115,14 +115,24 @@ export function WhatsAppWahaConfig({ onChanged }: { onChanged?: () => void }) {
   };
 
   const disconnect = async () => {
-    if (!window.confirm(t('disconnectConfirm'))) return;
+    if (!confirm(t('disconnectConfirm'))) return;
     setDisconnecting(true);
     try {
-      await fetch('/api/whatsapp/waha/session', { method: 'DELETE' });
+      const res = await fetch('/api/whatsapp/waha/session', { method: 'DELETE' });
+      if (!res.ok) {
+        // Backend couldn't tear the session/config down — keep the UI
+        // on the real (still-connected) state instead of a phantom
+        // "disconnected" that would leave the provider selector locked
+        // with no explanation.
+        toast.error(t('disconnectFailed'));
+        return;
+      }
       workingNotifiedRef.current = false;
       setStatus('IDLE');
       setPhone(null);
       onChanged?.();
+    } catch {
+      toast.error(t('disconnectFailed'));
     } finally {
       setDisconnecting(false);
     }

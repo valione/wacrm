@@ -1498,6 +1498,7 @@
       "disconnect": "Desconectar",
       "disconnecting": "Desconectando…",
       "disconnectConfirm": "Desconectar este número? Conversas e contatos são preservados.",
+      "disconnectFailed": "Não foi possível desconectar. Verifique o servidor WAHA e tente novamente.",
       "sessionDown": "A sessão não está ativa — reconecte pelo QR Code.",
       "serverUnreachable": "Servidor WAHA inacessível — verifique a variável WAHA_URL.",
       "switchBlocked": "Desconecte o provedor atual antes de trocar.",
