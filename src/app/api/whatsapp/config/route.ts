@@ -14,6 +14,7 @@ import {
   getInstanceStatus,
   disconnectInstance,
   deleteInstance,
+  isGoneError,
 } from '@/lib/whatsapp/uazapi-api'
 
 /**
@@ -206,7 +207,21 @@ export async function GET() {
             message: 'A sessão Uazapi não está ativa — reconecte pelo QR Code.',
           }),
         })
-      } catch {
+      } catch (err) {
+        // 401/404 significam instância morta (expirada/apagada — o demo
+        // server apaga em 1h), não servidor fora do ar. Mesma distinção
+        // feita na rota de reconexão (uazapi/instance POST).
+        if (isGoneError(err)) {
+          return NextResponse.json({
+            connected: false,
+            provider: 'uazapi',
+            capabilities: CAPABILITIES.uazapi,
+            waha_available: wahaEnabled(),
+            uazapi_available: uazapiEnabled(),
+            reason: 'uazapi_session_down',
+            message: 'A instância Uazapi não está mais ativa — reconecte pelo QR Code.',
+          })
+        }
         return NextResponse.json({
           connected: false,
           provider: 'uazapi',
