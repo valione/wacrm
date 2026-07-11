@@ -63,8 +63,16 @@ export interface UazapiInstanceStatus {
   loggedIn: boolean
 }
 
-/** Cria a instância no servidor Uazapi. Retorna o token que autentica as demais chamadas. */
-export async function createInstance(args: { name: string }): Promise<{ token: string }> {
+/**
+ * Cria a instância no servidor Uazapi. Retorna o token que autentica as
+ * demais chamadas e o id da instância (`instance.id` na resposta) — é
+ * esse id, não o nome, que a Uazapi manda no campo `instance` do payload
+ * do webhook (confirmado no OpenAPI: `WebhookEvent.instance` = "ID da
+ * instância que gerou o evento"; migração 038 documenta a mesma decisão).
+ * `provider_session` em whatsapp_config precisa guardar esse id para o
+ * webhook conseguir resolver a conta pelo evento recebido.
+ */
+export async function createInstance(args: { name: string }): Promise<{ token: string; id: string }> {
   const r = await uazapiFetch(
     '/instance/create',
     { method: 'POST', body: JSON.stringify({ name: args.name }) },
@@ -72,7 +80,8 @@ export async function createInstance(args: { name: string }): Promise<{ token: s
   )
   const data = await r.json()
   if (!data.token) throw new Error('Uazapi createInstance: resposta sem token')
-  return { token: data.token }
+  if (!data.instance?.id) throw new Error('Uazapi createInstance: resposta sem instance.id')
+  return { token: data.token, id: data.instance.id }
 }
 
 export async function connectInstance(args: { token: string }): Promise<void> {

@@ -9,6 +9,12 @@ import {
 import { encrypt, decrypt } from '@/lib/whatsapp/encryption'
 import { CAPABILITIES } from '@/lib/whatsapp/providers/resolve'
 import { wahaEnabled, getSession, logoutAndDelete } from '@/lib/whatsapp/waha-api'
+import {
+  uazapiEnabled,
+  getInstanceStatus,
+  disconnectInstance,
+  deleteInstance,
+} from '@/lib/whatsapp/uazapi-api'
 
 /**
  * Resolve the caller's account_id from their profile. Inlined here
@@ -85,6 +91,7 @@ export async function GET() {
           provider: null,
           capabilities: null,
           waha_available: wahaEnabled(),
+          uazapi_available: uazapiEnabled(),
         },
         { status: 200 },
       )
@@ -106,6 +113,7 @@ export async function GET() {
           provider: null,
           capabilities: null,
           waha_available: wahaEnabled(),
+          uazapi_available: uazapiEnabled(),
         },
         { status: 200 }
       )
@@ -120,6 +128,7 @@ export async function GET() {
           provider: null,
           capabilities: null,
           waha_available: wahaEnabled(),
+          uazapi_available: uazapiEnabled(),
         },
         { status: 200 }
       )
@@ -133,6 +142,7 @@ export async function GET() {
           provider: 'waha',
           capabilities: CAPABILITIES.waha,
           waha_available: true,
+          uazapi_available: uazapiEnabled(),
           waha_status: info.status,
           phone: config.provider_phone,
           ...(info.status !== 'WORKING' && {
@@ -146,8 +156,65 @@ export async function GET() {
           provider: 'waha',
           capabilities: CAPABILITIES.waha,
           waha_available: wahaEnabled(),
+          uazapi_available: uazapiEnabled(),
           reason: 'waha_server_unreachable',
           message: 'Servidor WAHA inacessível — verifique WAHA_URL e se o container está no ar.',
+        })
+      }
+    }
+
+    // Ramo uazapi ANTES do decrypt Meta abaixo — o access_token uazapi
+    // também é criptografado de verdade (diferente do sentinela 'waha'
+    // do ramo acima), mas o fluxo de verificação é outro (getInstanceStatus
+    // em vez de verifyPhoneNumber). Mesmo padrão do ramo waha: status
+    // reportado direto do servidor do provedor, não do valor salvo.
+    if (config.provider === 'uazapi') {
+      let uazapiToken: string
+      try {
+        uazapiToken = decrypt(config.access_token)
+      } catch (err) {
+        console.error('[whatsapp/config GET] Uazapi token decryption failed:', err)
+        return NextResponse.json(
+          {
+            connected: false,
+            reason: 'token_corrupted',
+            needs_reset: true,
+            message:
+              'The stored access token cannot be decrypted with the current ENCRYPTION_KEY. This usually means the key changed, or it differs between environments (local vs Hostinger vs Vercel). Click "Reset Configuration" below, then re-save.',
+            provider: 'uazapi',
+            capabilities: CAPABILITIES.uazapi,
+            waha_available: wahaEnabled(),
+            uazapi_available: uazapiEnabled(),
+          },
+          { status: 200 },
+        )
+      }
+
+      try {
+        const info = await getInstanceStatus({ token: uazapiToken })
+        const connected = info.status === 'connected' && info.loggedIn
+        return NextResponse.json({
+          connected,
+          provider: 'uazapi',
+          capabilities: CAPABILITIES.uazapi,
+          waha_available: wahaEnabled(),
+          uazapi_available: true,
+          uazapi_status: info.status,
+          phone: config.provider_phone,
+          ...(!connected && {
+            reason: 'uazapi_session_down',
+            message: 'A sessão Uazapi não está ativa — reconecte pelo QR Code.',
+          }),
+        })
+      } catch {
+        return NextResponse.json({
+          connected: false,
+          provider: 'uazapi',
+          capabilities: CAPABILITIES.uazapi,
+          waha_available: wahaEnabled(),
+          uazapi_available: uazapiEnabled(),
+          reason: 'uazapi_server_unreachable',
+          message: 'Servidor Uazapi inacessível — verifique UAZAPI_URL e as credenciais.',
         })
       }
     }
@@ -169,6 +236,7 @@ export async function GET() {
           provider: 'meta',
           capabilities: CAPABILITIES.meta,
           waha_available: wahaEnabled(),
+          uazapi_available: uazapiEnabled(),
         },
         { status: 200 }
       )
@@ -186,6 +254,7 @@ export async function GET() {
         provider: 'meta',
         capabilities: CAPABILITIES.meta,
         waha_available: wahaEnabled(),
+        uazapi_available: uazapiEnabled(),
       })
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown Meta API error'
@@ -198,6 +267,7 @@ export async function GET() {
           provider: 'meta',
           capabilities: CAPABILITIES.meta,
           waha_available: wahaEnabled(),
+          uazapi_available: uazapiEnabled(),
         },
         { status: 200 }
       )
@@ -515,7 +585,7 @@ export async function DELETE() {
 
     const { data: config } = await supabase
       .from('whatsapp_config')
-      .select('provider, provider_session')
+      .select('provider, provider_session, access_token')
       .eq('account_id', accountId)
       .maybeSingle()
 
@@ -524,6 +594,16 @@ export async function DELETE() {
         await logoutAndDelete({ session: config.provider_session })
       } catch (err) {
         console.error('[whatsapp/config DELETE] WAHA logout failed (non-fatal):', err)
+      }
+    }
+
+    if (config?.provider === 'uazapi' && uazapiEnabled() && config.access_token) {
+      try {
+        const token = decrypt(config.access_token)
+        await disconnectInstance({ token })
+        await deleteInstance({ token })
+      } catch (err) {
+        console.error('[whatsapp/config DELETE] Uazapi disconnect/delete failed (non-fatal):', err)
       }
     }
 

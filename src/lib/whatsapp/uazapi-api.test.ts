@@ -29,16 +29,26 @@ describe('uazapi-api', () => {
     expect(uazapiEnabled()).toBe(false)
   })
 
-  it('createInstance faz POST /instance/create com header admintoken e retorna o token', async () => {
+  it('createInstance faz POST /instance/create com header admintoken e retorna token+id', async () => {
     const mock = fetch as ReturnType<typeof vi.fn>
-    mock.mockResolvedValue(new Response(JSON.stringify({ token: 'uuid-1234' }), { status: 200 }))
+    mock.mockResolvedValue(new Response(
+      JSON.stringify({ token: 'uuid-1234', instance: { id: 'inst-uuid-5678', name: 'wacrm_acc123' } }),
+      { status: 200 },
+    ))
     const { createInstance } = await import('./uazapi-api')
     const r = await createInstance({ name: 'wacrm_acc123' })
-    expect(r.token).toBe('uuid-1234')
+    expect(r).toEqual({ token: 'uuid-1234', id: 'inst-uuid-5678' })
     const [url, init] = mock.mock.calls[0]
     expect(url).toBe('http://uazapi.local:8080/instance/create')
     expect((init.headers as Record<string, string>).admintoken).toBe('test-admin-token')
     expect(JSON.parse(init.body as string)).toEqual({ name: 'wacrm_acc123' })
+  })
+
+  it('createInstance lança se a resposta não trouxer instance.id (webhook usa o id, não o nome)', async () => {
+    const mock = fetch as ReturnType<typeof vi.fn>
+    mock.mockResolvedValue(new Response(JSON.stringify({ token: 'uuid-1234' }), { status: 200 }))
+    const { createInstance } = await import('./uazapi-api')
+    await expect(createInstance({ name: 'wacrm_acc123' })).rejects.toThrow(/instance\.id/)
   })
 
   it('connectInstance faz POST /instance/connect com header token da instância', async () => {
