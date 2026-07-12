@@ -25,27 +25,52 @@ conversa no WhatsApp). Modelo de uso: uma instalação por cliente, admin único
    consultam as APIs quando o dashboard abre; resultado em cache por 1h
    (tabela `marketing_cache`: conta+plataforma+período → JSON + fetched_at).
    Sem sync em background nesta fase.
-3. **Métricas:**
-   - Cartões de resumo: investimento total, leads totais, CPL médio
-     (consolidado Meta+Google Ads), sessões GA4.
-   - GA4: sessões, usuários, taxa de engajamento, conversões, principais
-     origens de tráfego (tabela).
-   - Meta Ads e Google Ads: investimento, impressões, cliques, CTR,
-     leads/conversões, CPL — **por campanha** (tabela).
-   - Seletor de período: 7/30/90 dias, com comparação vs período anterior
-     (deltas % nos cartões).
-4. **Atribuição de leads (anúncio → conversa):**
-   - Captura: anúncios "Clique para WhatsApp" da Meta entregam metadados de
-     origem (referral: source_id/ad_id, headline) junto com a primeira
-     mensagem. Migração adiciona `conversations.ad_referral JSONB` (nullable);
-     o pipeline inbound grava quando o provedor entregar (Meta oficial:
+3. **Métricas — lista fechada (aprovada pelo dono do projeto):**
+   - *Cartões de resumo (deltas % vs período anterior):* (1) investimento
+     total Meta+Google Ads; (2) leads totais de anúncio; (3) CPL médio
+     consolidado; (4) sessões GA4; (5) conversas WhatsApp iniciadas no
+     período; (6) conversas vindas de anúncio.
+   - *Gráfico principal (linha, por dia):* (7) investimento por dia;
+     (8) leads por dia; (9) conversas WhatsApp criadas por dia (sobreposto).
+   - *Meta Ads, tabela por campanha + totais + badge de status:*
+     (10) investimento; (11) impressões; (12) alcance; (13) cliques;
+     (14) CTR; (15) CPC; (16) leads/resultados; (17) CPL; (18) frequência.
+   - *Google Ads (leva 2), espelho da Meta:* (19–25) investimento,
+     impressões, cliques, CTR, CPC, conversões, CPA; (26) parcela de
+     impressão.
+   - *GA4:* (27) sessões; (28) usuários totais e novos; (29) taxa de
+     engajamento; (30) duração média da sessão; (31) conversões
+     (eventos-chave); (32) tabela origem/mídia com sessões e conversões;
+     (33) top 10 páginas.
+   - *Atribuição (dados do CRM):* (34) conversas por origem — três fatias:
+     Anúncio / Site / Direto-outros; (35) tabela por anúncio/campanha de
+     origem: conversas geradas, % respondidas, negócios criados no pipeline
+     (join com `deals`); (36) custo por conversa iniciada (investimento ÷
+     conversas atribuídas); (37) cliques no botão WhatsApp do site por
+     origem da sessão (GA4, evento `click_whatsapp` ou equivalente
+     configurado no site); (38) conversas com origem Site, por página de
+     entrada (marcador).
+   - Seletor de período global: 7/30/90 dias, comparação vs anterior.
+4. **Atribuição de origem das conversas (três mecanismos):**
+   - **Anúncio:** anúncios "Clique para WhatsApp" entregam metadados de
+     origem (referral: source_id/ad_id, headline) na primeira mensagem.
+     Migração adiciona `conversations.ad_referral JSONB` (nullable); o
+     pipeline inbound grava quando o provedor entregar (Meta oficial:
      `message.referral`; Uazapi: campo equivalente no payload — confirmar
      nome exato no E2E e implementar tolerante).
-   - Exibição: bloco "Leads por anúncio" no dashboard (conversas com
-     ad_referral agrupadas por campanha/anúncio no período) + badge de origem
-     na conversa do inbox. Conversas sem referral = "orgânico/direto".
-   - Honestidade de escopo: atribuição cobre apenas cliques diretos
-     anúncio→WhatsApp que as plataformas reportam; sem UTM/pixel nesta fase.
+   - **Site (marcador):** o botão de WhatsApp do site usa
+     `wa.me/<numero>?text=...%20[ref:<pagina>]`. O pipeline inbound detecta
+     `[ref:...]` na PRIMEIRA mensagem da conversa, grava
+     `conversations.site_ref TEXT` (ex.: `site-home`) e remove o código do
+     texto exibido/persistido. O projeto entrega o snippet do botão e o
+     passo a passo do evento GA4 na documentação (docs/marketing.md).
+     Limitação aceita: lead que apaga o texto pré-preenchido cai em
+     Direto-outros.
+   - **Direto-outros:** sem referral e sem marcador.
+   - Badge de origem na conversa do inbox (Anúncio/Site/Direto).
+   - Honestidade de escopo: sem UTM/pixel nesta fase; campanhas de tráfego
+     para site aparecem com investimento porém sem conversas atribuídas —
+     a UI sinaliza isso explicitamente para não parecer campanha "ruim".
 
 ## Componentes
 
