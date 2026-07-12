@@ -23,12 +23,15 @@
 --      id de um formulário do site).
 --
 -- RLS
---   Account-scoped, mesmo padrão da 017/035/028: `is_account_member`
---   (SECURITY DEFINER, definido em 017_account_sharing.sql:136) sem
---   `min_role` = qualquer membro pode ler/escrever. Sem
---   diferenciação de papel (viewer vs agent vs admin) porque ainda
---   não há distinção de permissão definida para marketing na spec —
---   revisar quando o fluxo de conexão de integrações ganhar UI.
+--   `marketing_integrations` é settings-class com segredo
+--   criptografado, mesmo perfil de `api_keys` (026) e
+--   `webhook_endpoints` (028): SELECT para qualquer membro (viewer+),
+--   INSERT/UPDATE/DELETE só admin+ via
+--   `is_account_member(account_id, 'admin')` (SECURITY DEFINER,
+--   definido em 017_account_sharing.sql:136).
+--   `marketing_cache` só tem policy de SELECT (membro): quem escreve
+--   é a rota de summary com o client service-role, que bypassa RLS —
+--   nenhum usuário escreve nessa tabela diretamente.
 --
 -- Idempotente — safe to run multiple times.
 -- ============================================================
@@ -55,9 +58,30 @@ CREATE INDEX IF NOT EXISTS idx_marketing_integrations_account
 
 ALTER TABLE marketing_integrations ENABLE ROW LEVEL SECURITY;
 
+-- Dropada por segurança caso uma execução anterior desta migração
+-- tenha criado a policy FOR ALL antiga (viewer podia escrever).
 DROP POLICY IF EXISTS marketing_integrations_all ON marketing_integrations;
-CREATE POLICY marketing_integrations_all ON marketing_integrations
-  FOR ALL USING (is_account_member(account_id));
+
+-- SELECT: any member of the account (viewer+) can see which
+-- integrations are connected. `credentials` is in the table but the
+-- dashboard never selects it (the client type omits the field).
+DROP POLICY IF EXISTS marketing_integrations_select ON marketing_integrations;
+CREATE POLICY marketing_integrations_select ON marketing_integrations FOR SELECT
+  USING (is_account_member(account_id));
+
+-- INSERT / UPDATE / DELETE: admin+ only (settings-class, espelhando
+-- api_keys/webhook_endpoints — tabelas com segredo criptografado).
+DROP POLICY IF EXISTS marketing_integrations_insert ON marketing_integrations;
+CREATE POLICY marketing_integrations_insert ON marketing_integrations FOR INSERT
+  WITH CHECK (is_account_member(account_id, 'admin'));
+
+DROP POLICY IF EXISTS marketing_integrations_update ON marketing_integrations;
+CREATE POLICY marketing_integrations_update ON marketing_integrations FOR UPDATE
+  USING (is_account_member(account_id, 'admin'));
+
+DROP POLICY IF EXISTS marketing_integrations_delete ON marketing_integrations;
+CREATE POLICY marketing_integrations_delete ON marketing_integrations FOR DELETE
+  USING (is_account_member(account_id, 'admin'));
 
 DROP TRIGGER IF EXISTS set_updated_at ON marketing_integrations;
 CREATE TRIGGER set_updated_at BEFORE UPDATE ON marketing_integrations
@@ -78,9 +102,18 @@ CREATE INDEX IF NOT EXISTS idx_marketing_cache_account
 
 ALTER TABLE marketing_cache ENABLE ROW LEVEL SECURITY;
 
+-- Dropada por segurança caso uma execução anterior desta migração
+-- tenha criado a policy FOR ALL antiga.
 DROP POLICY IF EXISTS marketing_cache_all ON marketing_cache;
-CREATE POLICY marketing_cache_all ON marketing_cache
-  FOR ALL USING (is_account_member(account_id));
+
+-- SELECT: any member of the account (viewer+) can read cached
+-- metrics. Sem policy de INSERT/UPDATE/DELETE de propósito: quem
+-- escreve no cache é a rota de summary usando o client service-role
+-- (bypassa RLS); com RLS habilitado e nenhuma policy de escrita,
+-- qualquer escrita autenticada direta é negada por padrão.
+DROP POLICY IF EXISTS marketing_cache_select ON marketing_cache;
+CREATE POLICY marketing_cache_select ON marketing_cache FOR SELECT
+  USING (is_account_member(account_id));
 
 -- Atribuição de origem por conversa (capturada no primeiro contato).
 ALTER TABLE conversations
