@@ -228,6 +228,9 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
               width={40}
               height={24}
               priority
+              // SVG não passa pelo otimizador do Next (que bloqueia o tipo
+              // por padrão — 400 "image type is not allowed").
+              unoptimized
             />
             {/* Nome de marca — vem de branding.ts (env), não do i18n:
                 marca não se traduz e cada instalação tem a sua. */}

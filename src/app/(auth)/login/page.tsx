@@ -87,6 +87,9 @@ function LoginPageInner() {
               width={132}
               height={100}
               priority
+              // SVG não passa pelo otimizador do Next (que bloqueia o tipo
+              // por padrão — 400 "image type is not allowed").
+              unoptimized
               className="mb-2"
             />
           )}
