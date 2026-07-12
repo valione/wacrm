@@ -9,8 +9,12 @@ export function renderBroadcastText(
 ): string {
   // Field names are free text (see custom-fields-manager.tsx), so
   // multi-word keys like "data de nascimento" must match too — only
-  // exclude the brace characters themselves, not \w.
-  return template.replace(/\{\{\s*([^{}]+?)\s*\}\}/g, (_m, rawKey: string) => {
+  // exclude the brace characters themselves, not \w. No \s* or lazy
+  // quantifiers: their ambiguity over runs of spaces causes catastrophic
+  // backtracking on an unclosed '{{' (ReDoS — seconds of CPU per few
+  // thousand spaces). The greedy capture takes surrounding whitespace
+  // and the key is trimmed below instead.
+  return template.replace(/\{\{([^{}]+)\}\}/g, (_m, rawKey: string) => {
     const trimmed = rawKey.trim()
     const key = trimmed.toLowerCase()
     if (key === 'nome' || key === 'name') return contact.name ?? ''

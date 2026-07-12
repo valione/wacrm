@@ -34,7 +34,9 @@ interface VariableMapping {
 // Same placeholder grammar as src/lib/broadcasts/render.ts — keep in sync.
 // Field names are free text (can contain spaces, e.g. "data de
 // nascimento"), so only the brace characters are excluded from the key.
-const PLACEHOLDER_RE = /\{\{\s*([^{}]+?)\s*\}\}/g;
+// No \s* or lazy quantifiers (catastrophic backtracking / ReDoS on an
+// unclosed '{{' + spaces) — the captured key is trimmed at the call site.
+const PLACEHOLDER_RE = /\{\{([^{}]+)\}\}/g;
 
 interface Step3TemplateProps {
   template: MessageTemplate;

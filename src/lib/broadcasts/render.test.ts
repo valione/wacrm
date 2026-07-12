@@ -33,4 +33,17 @@ describe('renderBroadcastText', () => {
     expect(renderBroadcastText('Nascido em {{data de nascimento}}', { name: 'Ana' }))
       .toBe('Nascido em ')
   })
+  it('chave multi-palavra com espaços nas bordas resolve trimada', () => {
+    expect(renderBroadcastText('Nascido em {{ Data de Nascimento }}', {
+      name: 'Ana', customValues: { 'data de nascimento': '01/01/1990' },
+    })).toBe('Nascido em 01/01/1990')
+  })
+  it("regressão ReDoS: '{{' não fechado + 500 espaços renderiza em <50ms", () => {
+    const pathological = '{{' + ' '.repeat(500)
+    const start = performance.now()
+    const result = renderBroadcastText(pathological, { name: 'X' })
+    const elapsed = performance.now() - start
+    expect(result).toBe(pathological)
+    expect(elapsed).toBeLessThan(50)
+  })
 })

@@ -20,6 +20,12 @@ import { resolveAudienceServer, AudienceError, type AudienceInput } from '@/lib/
 const MAX_RECIPIENTS = 1000
 /** `broadcast_recipients` inserts, matching use-broadcast-sending.ts. */
 const INSERT_BATCH_SIZE = 200
+/**
+ * WhatsApp caps a text message at 4096 chars (mirrors MAX_CHARS in
+ * step1-compose-message.tsx). Also defense-in-depth: bounds the input
+ * the cron processor runs the placeholder regex over on every tick.
+ */
+const MAX_CONTENT_CHARS = 4096
 
 const MEDIA_TYPES = new Set(['image', 'video', 'document', 'audio'])
 
@@ -75,6 +81,16 @@ export async function POST(request: Request) {
   // exactly one of content_text / template_name.
   if ((contentText !== null) === (templateName !== null)) {
     return badRequest("Informe exatamente um de 'content_text' ou 'template_name'.")
+  }
+
+  if (contentText !== null && contentText.length > MAX_CONTENT_CHARS) {
+    return NextResponse.json(
+      {
+        error: 'content_too_long',
+        message: `'content_text' excede o limite de ${MAX_CONTENT_CHARS} caracteres.`,
+      },
+      { status: 400 },
+    )
   }
 
   const contentMediaUrl =
