@@ -60,7 +60,7 @@ function fromChatId(chatId: string): string {
 }
 
 const MESSAGE_TYPE_TO_CONTENT: Array<[RegExp, NormalizedInboundMessage['contentType']]> = [
-  [/image/i, 'image'],
+  [/image|sticker/i, 'image'],
   [/video/i, 'video'],
   [/audio|ptt/i, 'audio'],
   [/document/i, 'document'],
@@ -78,15 +78,22 @@ export interface UazapiMessagePayload {
   /** Texto original — nome de campo confirmado no schema Message. */
   text?: string | null
   /**
-   * "Conteúdo bruto (JSON serializado ou texto)" por doc do schema — o
-   * spec é ambíguo sobre quando `text` vs `content` vem populado.
-   * Toleramos string solta aqui como fallback quando `text` está ausente;
-   * PENDENTE confirmar no E2E qual campo a Uazapi realmente usa em
-   * produção para mensagens de texto simples.
+   * Confirmado no E2E: em texto simples vem string (igual a `text`); em
+   * MÍDIA vem um OBJETO com a URL criptografada do WhatsApp (URL,
+   * mediaKey, mimetype...) — inutilizável direto; a rota resolve via
+   * POST /message/download e injeta o resultado em `fileURL`.
    */
   content?: unknown
   quoted?: string | null
-  /** URL do arquivo de mídia, quando presente no próprio evento do webhook. */
+  /** Legenda de mídia (quando houver). */
+  caption?: string | null
+  /** Tipo de mídia no evento real ('image', 'video', 'audio', 'ptt', ...). */
+  mediaType?: string | null
+  /**
+   * URL do arquivo hospedado no servidor Uazapi. NÃO vem no evento real —
+   * a rota do webhook preenche via downloadMessageFile antes de chamar
+   * normalizeUazapiMessage.
+   */
   fileURL?: string | null
 }
 
@@ -97,12 +104,16 @@ export function normalizeUazapiMessage(
 ): NormalizedInboundMessage | null {
   if (data.isGroup || data.chatid.endsWith('@g.us')) return null
 
-  const contentText = data.text || (typeof data.content === 'string' ? data.content : null) || null
+  const contentText =
+    data.text || data.caption || (typeof data.content === 'string' ? data.content : null) || null
 
   let contentType: NormalizedInboundMessage['contentType'] = 'text'
   let mediaUrl: string | null = null
   if (data.fileURL) {
-    contentType = MESSAGE_TYPE_TO_CONTENT.find(([re]) => re.test(data.messageType ?? ''))?.[1] ?? 'document'
+    // mediaType é o campo do evento real ('image'/'video'/...); messageType
+    // ('ImageMessage' etc.) fica como fallback do formato documentado.
+    const kind = data.mediaType || data.messageType || ''
+    contentType = MESSAGE_TYPE_TO_CONTENT.find(([re]) => re.test(kind))?.[1] ?? 'document'
     mediaUrl = buildMediaProxyUrl(mediaProxyPath, data.fileURL)
   }
 

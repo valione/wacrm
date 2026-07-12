@@ -98,18 +98,46 @@ describe('uazapi-webhook helpers', () => {
     expect(n!.contentText).toBe('legenda')
   })
 
-  it('normalizeUazapiMessage cai para document quando messageType de mídia não é reconhecido', async () => {
+  it('normalizeUazapiMessage mapeia sticker para image e cai para document no desconhecido', async () => {
     const { normalizeUazapiMessage } = await import('./uazapi-webhook')
-    const n = normalizeUazapiMessage({
+    const base = {
       messageid: 'x',
       chatid: '5511999999999@s.whatsapp.net',
       sender: '5511999999999@s.whatsapp.net',
       fromMe: false,
-      messageType: 'stickerMessage',
       fileURL: 'http://uazapi.local:8080/files/x.webp',
       messageTimestamp: 1767998400000,
+    }
+    // sticker é webp — renderiza como imagem no inbox
+    const sticker = normalizeUazapiMessage(
+      { ...base, messageType: 'stickerMessage' }, '/api/whatsapp/uazapi/media')
+    expect(sticker!.contentType).toBe('image')
+    // tipo genuinamente desconhecido → document (link de download genérico)
+    const unknown = normalizeUazapiMessage(
+      { ...base, messageType: 'contactMessage' }, '/api/whatsapp/uazapi/media')
+    expect(unknown!.contentType).toBe('document')
+  })
+
+  it('normalizeUazapiMessage usa mediaType do evento real (formato E2E) para o contentType', async () => {
+    const { normalizeUazapiMessage } = await import('./uazapi-webhook')
+    // Formato real capturado no E2E: mídia sem text, content objeto com a
+    // URL criptografada do WhatsApp; fileURL injetado pela rota via
+    // POST /message/download; mediaType 'image' no nível da mensagem.
+    const n = normalizeUazapiMessage({
+      messageid: 'A51369E177C0602EC726548E185811B3',
+      chatid: '5511919089809@s.whatsapp.net',
+      sender: '45402787156104@lid',
+      fromMe: false,
+      mediaType: 'image',
+      content: { URL: 'https://mmg.whatsapp.net/v/x.enc', mediaKey: 'k' },
+      fileURL: 'http://uazapi.local:8080/files/abc.jpg',
+      messageTimestamp: 1783897463000,
     }, '/api/whatsapp/uazapi/media')
-    expect(n!.contentType).toBe('document')
+    expect(n!.contentType).toBe('image')
+    expect(n!.contentText).toBeNull()
+    expect(n!.mediaUrl).toBe(
+      '/api/whatsapp/uazapi/media?src=' + encodeURIComponent('http://uazapi.local:8080/files/abc.jpg'),
+    )
   })
 
   it('ignora mensagens de grupo (chatid @g.us)', async () => {

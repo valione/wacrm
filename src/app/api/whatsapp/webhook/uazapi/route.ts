@@ -16,7 +16,8 @@ import {
   type UazapiMessagePayload,
 } from '@/lib/whatsapp/uazapi-webhook'
 import { persistInboundMessage, applyStatusByExternalId } from '@/lib/whatsapp/inbound'
-import { uazapiEnabled } from '@/lib/whatsapp/uazapi-api'
+import { uazapiEnabled, downloadMessageFile } from '@/lib/whatsapp/uazapi-api'
+import { decrypt } from '@/lib/whatsapp/encryption'
 
 // Mesmo tuning do webhook WAHA — dá margem para o processamento em
 // after() (persistInboundMessage pode encadear automações/flows/AI reply).
@@ -55,11 +56,13 @@ export async function POST(request: NextRequest) {
   // seguro porque o segredo da URL já autenticou a origem. O caminho por
   // `instance`/provider_session fica como fallback do formato documentado.
   const db = supabaseAdmin()
-  let config: { account_id: string; user_id: string } | null = null
+  // access_token = token da instância (criptografado) — necessário para o
+  // download de mídia (POST /message/download) no processamento abaixo.
+  let config: { account_id: string; user_id: string; access_token: string | null } | null = null
   if (event.instance) {
     const { data } = await db
       .from('whatsapp_config')
-      .select('account_id, user_id')
+      .select('account_id, user_id, access_token')
       .eq('provider_session', event.instance)
       .eq('provider', 'uazapi')
       .maybeSingle()
@@ -69,7 +72,7 @@ export async function POST(request: NextRequest) {
     const accountId = event.instanceName.slice('wacrm_'.length)
     const { data } = await db
       .from('whatsapp_config')
-      .select('account_id, user_id')
+      .select('account_id, user_id, access_token')
       .eq('account_id', accountId)
       .eq('provider', 'uazapi')
       .maybeSingle()
@@ -91,8 +94,26 @@ export async function POST(request: NextRequest) {
   after(async () => {
     try {
       if (eventType === 'messages') {
+        const payload = (event.message ?? event.data) as UazapiMessagePayload
+        // Mídia no evento real: `content` é um objeto com a URL
+        // CRIPTOGRAFADA do WhatsApp (.enc + mediaKey) — inutilizável.
+        // Pedimos ao servidor o arquivo hospedado (POST /message/download)
+        // e injetamos em fileURL, que o normalizador transforma na URL do
+        // proxy. Falha aqui não derruba a mensagem: persiste sem mídia.
+        const isMedia = Boolean(
+          payload.mediaType || (payload.content && typeof payload.content === 'object'),
+        )
+        if (!payload.fileURL && isMedia && config.access_token) {
+          try {
+            const token = decrypt(config.access_token)
+            const file = await downloadMessageFile({ token, messageId: payload.messageid })
+            payload.fileURL = file.fileURL
+          } catch (err) {
+            console.error('[webhook/uazapi] download de mídia falhou:', err)
+          }
+        }
         const normalized = normalizeUazapiMessage(
-          (event.message ?? event.data) as UazapiMessagePayload,
+          payload,
           '/api/whatsapp/uazapi/media',
         )
         if (normalized) await persistInboundMessage(normalized, config.account_id, config.user_id)

@@ -207,6 +207,30 @@ export async function uazapiSendReaction(args: {
   )
 }
 
+/**
+ * Pede ao servidor Uazapi para baixar/hospedar o arquivo de uma mensagem
+ * de mídia e devolver o link. Necessário porque o webhook real entrega a
+ * mídia como `content` objeto apontando para a URL CRIPTOGRAFADA do
+ * WhatsApp (mmg.whatsapp.net/...enc + mediaKey) — inutilizável direto;
+ * o `fileURL` documentado não vem no evento (confirmado no E2E).
+ * `generate_mp3: true` (default) converte áudios PTT p/ mp3 tocável.
+ */
+export async function downloadMessageFile(args: {
+  token: string; messageId: string
+}): Promise<{ fileURL: string; mimetype: string | null }> {
+  const r = await uazapiFetch(
+    '/message/download',
+    {
+      method: 'POST',
+      body: JSON.stringify({ id: args.messageId, return_link: true, return_base64: false }),
+    },
+    { token: args.token },
+  )
+  const data = await r.json()
+  if (!data.fileURL) throw new Error('Uazapi message/download: resposta sem fileURL')
+  return { fileURL: data.fileURL, mimetype: data.mimetype ?? null }
+}
+
 /** Baixa mídia hospedada no próprio servidor Uazapi. Só aceita URLs de UAZAPI_URL. */
 export async function downloadUazapiMedia(args: { url: string }): Promise<Response> {
   if (!args.url.startsWith(uazapiBase() + '/')) {
