@@ -181,6 +181,16 @@ export interface Conversation {
   ai_autoreply_disabled?: boolean;
   ai_reply_count?: number;
   ai_handoff_summary?: string | null;
+  /**
+   * Origin attribution captured on first contact (migration 040):
+   *  - `ad_referral` — raw ad-click payload from the WhatsApp/Meta
+   *    webhook (`referral` object) when the conversation started
+   *    from an ad click-to-chat.
+   *  - `site_ref` — reference (e.g. UTM/click id) attached when the
+   *    conversation started from a site widget/form instead of an ad.
+   */
+  ad_referral?: Record<string, unknown> | null;
+  site_ref?: string | null;
 }
 
 // ============================================================
@@ -672,6 +682,27 @@ export interface QuickReply {
   content_text?: string | null;
   /** Set when `kind === 'interactive'`. */
   interactive_payload?: InteractiveMessagePayload | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// ============================================================
+// Marketing integrations (migration 040)
+// ============================================================
+
+export type MarketingPlatform = 'ga4' | 'meta_ads' | 'google_ads';
+
+/**
+ * Client-facing shape of `marketing_integrations`. Deliberately omits
+ * `credentials` (AES-256-GCM ciphertext) — that column never leaves
+ * the server; only `config` (non-secret ids like property_id /
+ * ad_account_id / customer_id) is safe to send to the client.
+ */
+export interface MarketingIntegration {
+  id: string;
+  account_id: string;
+  platform: MarketingPlatform;
+  config: Record<string, string>;
   created_at: string;
   updated_at: string;
 }
