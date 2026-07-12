@@ -54,7 +54,7 @@ conversa no WhatsApp). Modelo de uso: uma instalação por cliente, admin único
 4. **Atribuição de origem das conversas (três mecanismos):**
    - **Anúncio:** anúncios "Clique para WhatsApp" entregam metadados de
      origem (referral: source_id/ad_id, headline) na primeira mensagem.
-     Migração adiciona `conversations.ad_referral JSONB` e `conversations.site_ref TEXT`.(nullable); o
+     Migração adiciona `conversations.ad_referral JSONB` (nullable); o
      pipeline inbound grava quando o provedor entregar (Meta oficial:
      `message.referral`; Uazapi: campo equivalente no payload — confirmar
      nome exato no E2E e implementar tolerante).
