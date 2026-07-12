@@ -131,6 +131,9 @@ describe('uazapi-api', () => {
     expect(url).toBe('http://uazapi.local:8080/webhook')
     expect(JSON.parse(init.body as string)).toEqual({
       url: 'http://crm.local/api/whatsapp/webhook/uazapi',
+      // enabled: true é obrigatório — a Uazapi registra webhooks
+      // desativados por padrão (descoberto no E2E).
+      enabled: true,
       events: ['messages', 'messages_update', 'connection'],
       excludeMessages: ['wasSentByApi'],
     })
