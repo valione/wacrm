@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -218,9 +219,15 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
             close button is hidden since the sidebar is always-visible. */}
         <div className="flex h-14 shrink-0 items-center justify-between gap-2 border-b border-border px-4">
           <Link href="/dashboard" className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-              <MessageSquare className="h-4 w-4" />
-            </div>
+            {/* Ícone da marca (barras azuis) — fonte em CRM/branding/,
+                cópia em public/brand/. Proporção original ~1,68:1. */}
+            <Image
+              src="/brand/display4-icon.svg"
+              alt=""
+              width={40}
+              height={24}
+              priority
+            />
             {/* Nome de marca — vem de branding.ts (env), não do i18n:
                 marca não se traduz e cada instalação tem a sua. */}
             <span className="text-sm font-semibold text-foreground">

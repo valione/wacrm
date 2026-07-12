@@ -6,7 +6,7 @@
 //
 // NEXT_PUBLIC_* é inlinado no BUILD — trocar o valor exige rebuild.
 
-export const APP_NAME = process.env.NEXT_PUBLIC_APP_NAME || 'Display 4 | CRM'
+export const APP_NAME = process.env.NEXT_PUBLIC_APP_NAME || 'Display4 | CRM'
 
 /** Assinatura de propriedade exibida nos rodapés (sidebar, login). */
-export const OWNERSHIP_FOOTER = `${APP_NAME} by Valione Intelligence`
+export const OWNERSHIP_FOOTER = `${APP_NAME} by Valione Intelligence.`

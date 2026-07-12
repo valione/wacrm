@@ -31,9 +31,8 @@ export const metadata: Metadata = {
     index: false,
     follow: false,
   },
-  icons: {
-    icon: [{ url: "/icon" }],
-  },
+  // Favicon: convenção de arquivo src/app/icon.svg (Next injeta o <link>
+  // automaticamente) — sem entrada explícita em `icons` para não duplicar.
   formatDetection: {
     email: false,
     address: false,
