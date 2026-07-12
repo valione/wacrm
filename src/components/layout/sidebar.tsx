@@ -6,7 +6,8 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
-import { APP_NAME, OWNERSHIP_FOOTER } from "@/lib/branding";
+import { APP_NAME } from "@/lib/branding";
+import { OwnershipFooter } from "@/components/ownership-footer";
 import { useAuth } from "@/hooks/use-auth";
 import { useTotalUnread } from "@/hooks/use-total-unread";
 import { useUnreadNotifications } from "@/hooks/use-unread-notifications";
@@ -437,9 +438,7 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
           </DropdownMenu>
 
           {/* Assinatura de propriedade — presente em toda instalação. */}
-          <p className="mt-2 px-3 text-center text-[10px] leading-tight text-muted-foreground/70">
-            {OWNERSHIP_FOOTER}
-          </p>
+          <OwnershipFooter className="mt-2 px-3 text-center text-[10px] leading-tight text-muted-foreground/70" />
         </div>
       </aside>
     </>

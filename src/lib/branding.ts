@@ -8,5 +8,5 @@
 
 export const APP_NAME = process.env.NEXT_PUBLIC_APP_NAME || 'Display4 | CRM'
 
-/** Assinatura de propriedade exibida nos rodapés (sidebar, login). */
-export const OWNERSHIP_FOOTER = `${APP_NAME} by Valione Intelligence.`
+// A assinatura de propriedade ("<nome> by Valione Intelligence.") vive em
+// src/components/ownership-footer.tsx — tem markup (itálico), não é string.

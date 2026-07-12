@@ -6,7 +6,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { createClient } from "@/lib/supabase/client";
-import { OWNERSHIP_FOOTER } from "@/lib/branding";
+import { OwnershipFooter } from "@/components/ownership-footer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -170,10 +170,8 @@ function LoginPageInner() {
         </CardContent>
       </Card>
 
-      {/* Assinatura de propriedade da instalação (branding.ts). */}
-      <p className="mt-6 text-center text-xs text-muted-foreground/70">
-        {OWNERSHIP_FOOTER}
-      </p>
+      {/* Assinatura de propriedade da instalação. */}
+      <OwnershipFooter className="mt-6 text-center text-xs text-muted-foreground/70" />
     </div>
   );
 }
