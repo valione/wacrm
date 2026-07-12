@@ -133,6 +133,9 @@ export async function setInstanceWebhook(args: { token: string; url: string }): 
       method: 'POST',
       body: JSON.stringify({
         url: args.url,
+        // A Uazapi registra webhooks DESATIVADOS por padrão — sem
+        // enabled: true nenhum evento é entregue (descoberto no E2E).
+        enabled: true,
         // wasSentByApi evita o loop: sem isso, mensagens enviadas por nós
         // mesmos via API voltariam pelo webhook como se fossem novas.
         events: ['messages', 'messages_update', 'connection'],
