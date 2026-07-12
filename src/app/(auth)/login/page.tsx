@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { createClient } from "@/lib/supabase/client";
+import { OWNERSHIP_FOOTER } from "@/lib/branding";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -69,7 +70,7 @@ function LoginPageInner() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
+    <div className="flex min-h-screen flex-col items-center justify-center bg-background px-4">
       <Card className="w-full max-w-md border-border bg-card">
         <CardHeader className="items-center text-center">
           <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
@@ -158,6 +159,11 @@ function LoginPageInner() {
           </p>
         </CardContent>
       </Card>
+
+      {/* Assinatura de propriedade da instalação (branding.ts). */}
+      <p className="mt-6 text-center text-xs text-muted-foreground/70">
+        {OWNERSHIP_FOOTER}
+      </p>
     </div>
   );
 }
