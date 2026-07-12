@@ -159,8 +159,12 @@ export function WhatsAppConfig() {
       ? `${window.location.origin}/api/whatsapp/webhook`
       : '';
 
-  const fetchConfig = useCallback(async (acctId: string) => {
-    setLoading(true);
+  const fetchConfig = useCallback(async (acctId: string, background = false) => {
+    // Background refreshes (panel onChanged, post-save reloads) must not
+    // flip `loading` — that unmounts the whole section into a spinner and
+    // remounts the provider panel, whose mount-edge fires onChanged again,
+    // creating an unmount/remount flicker loop.
+    if (!background) setLoading(true);
     try {
       // Load form values from Supabase (shows what's in DB).
       // Switched from `user_id` (which would only match the row's
@@ -444,7 +448,7 @@ export function WhatsAppConfig() {
   // down) re-runs the provider/health fetch — that keeps `savedProvider`
   // fresh and re-locks/unlocks the selector cards accordingly.
   const reloadStatus = useCallback(() => {
-    if (accountId) void fetchConfig(accountId);
+    if (accountId) void fetchConfig(accountId, true);
   }, [accountId, fetchConfig]);
 
   function handleCopyWebhookUrl() {
