@@ -299,4 +299,46 @@ describe('ga4', () => {
       period: { start: '2026-06-01', end: '2026-06-30' },
     })).rejects.toThrow(/GA4 .*falhou: 500/)
   })
+
+  describe('ga4ValidateCredentials', () => {
+    it('faz o token exchange + UM runReport mínimo (1 dia, só sessions)', async () => {
+      const { serviceAccount } = makeServiceAccount()
+      const mock = mockFetchSequence([
+        { status: 200, body: { access_token: 'ya29.fake-token' } },
+        { status: 200, body: { rows: [] } },
+      ])
+      const { ga4ValidateCredentials } = await import('./ga4')
+      await ga4ValidateCredentials({
+        serviceAccountJson: JSON.stringify(serviceAccount),
+        propertyId: '123456',
+        date: '2026-07-10',
+      })
+
+      // Exatamente 2 chamadas: token + 1 runReport (nada dos 4 relatórios
+      // do ga4Summary).
+      expect(mock.mock.calls).toHaveLength(2)
+
+      const [reportUrl, reportInit] = mock.mock.calls[1]
+      expect(reportUrl).toBe('https://analyticsdata.googleapis.com/v1beta/properties/123456:runReport')
+      expect((reportInit.headers as Record<string, string>).Authorization).toBe('Bearer ya29.fake-token')
+      expect(JSON.parse(reportInit.body as string)).toEqual({
+        dateRanges: [{ startDate: '2026-07-10', endDate: '2026-07-10' }],
+        metrics: [{ name: 'sessions' }],
+      })
+    })
+
+    it('lança com a mensagem da plataforma quando o runReport de validação falha', async () => {
+      const { serviceAccount } = makeServiceAccount()
+      mockFetchSequence([
+        { status: 200, body: { access_token: 'ya29.fake-token' } },
+        { status: 403, body: { error: 'User does not have sufficient permissions for this property' } },
+      ])
+      const { ga4ValidateCredentials } = await import('./ga4')
+      await expect(ga4ValidateCredentials({
+        serviceAccountJson: JSON.stringify(serviceAccount),
+        propertyId: '123456',
+        date: '2026-07-10',
+      })).rejects.toThrow(/GA4 validação de credenciais falhou: 403/)
+    })
+  })
 })

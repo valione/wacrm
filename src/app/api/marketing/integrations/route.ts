@@ -28,7 +28,7 @@ import type { PostgrestError } from '@supabase/supabase-js'
 
 import { getCurrentAccount, requireRole, toErrorResponse } from '@/lib/auth/account'
 import { encrypt } from '@/lib/whatsapp/encryption'
-import { ga4Summary } from '@/lib/marketing/ga4'
+import { ga4ValidateCredentials } from '@/lib/marketing/ga4'
 
 // Truncate provider error messages before they reach the client — same
 // 300-char budget the marketing API clients themselves use for error
@@ -62,10 +62,10 @@ function yesterdayUTC(now: Date): string {
 
 /**
  * Valida as credenciais chamando o provedor de verdade, ANTES de gravar
- * qualquer coisa. GA4: `ga4Summary` de 1 dia (ontem) — exercita o JWT de
- * service account + a troca por access_token + um runReport real. Meta:
- * `GET /act_{id}?fields=name` — chamada mínima que confirma token +
- * ad_account_id sem gastar cota de /insights.
+ * qualquer coisa. GA4: `ga4ValidateCredentials` — JWT de service account +
+ * troca por access_token + UM runReport mínimo de 1 dia (ontem, só
+ * sessions). Meta: `GET /act_{id}?fields=name` — chamada mínima que
+ * confirma token + ad_account_id sem gastar cota de /insights.
  *
  * Retorna a mensagem de erro (truncada, sem credencial) quando a
  * validação falha; `null` quando passou.
@@ -82,8 +82,7 @@ async function validateCredentials(
       if (typeof serviceAccountJson !== 'string' || typeof propertyId !== 'string' || !propertyId) {
         return "GA4 requer 'credentials.serviceAccountJson' (string) e 'config.propertyId'"
       }
-      const day = yesterdayUTC(new Date())
-      await ga4Summary({ serviceAccountJson, propertyId, period: { start: day, end: day } })
+      await ga4ValidateCredentials({ serviceAccountJson, propertyId, date: yesterdayUTC(new Date()) })
       return null
     }
 

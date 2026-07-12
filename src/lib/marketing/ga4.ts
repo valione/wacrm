@@ -234,3 +234,37 @@ export async function ga4Summary(args: {
 
   return normalizeGa4Summary(totals, sources, pages, whatsappRows)
 }
+
+/**
+ * Validação mínima de credenciais para o POST /api/marketing/integrations:
+ * exercita o fluxo completo de autenticação (JWT de service account →
+ * access_token) + UM runReport de 1 dia com uma única métrica (sessions) —
+ * em vez dos 4 runReports do `ga4Summary` — porque o objetivo aqui é só
+ * confirmar que as credenciais funcionam e a service account tem acesso à
+ * propriedade, não coletar dados. Lança com a mensagem de erro da
+ * plataforma (mesmo formato dos demais erros deste módulo) quando algo
+ * está errado; resolve sem valor quando as credenciais são válidas.
+ *
+ * `date` (YYYY-MM-DD) é injetado pelo chamador (a rota passa "ontem" em
+ * UTC) para o teste controlar o corpo exato da chamada.
+ */
+export async function ga4ValidateCredentials(args: {
+  serviceAccountJson: string
+  propertyId: string
+  date: string
+}): Promise<void> {
+  const serviceAccount = JSON.parse(args.serviceAccountJson) as {
+    client_email: string
+    private_key: string
+  }
+  const accessToken = await ga4AccessToken(serviceAccount)
+  await runGa4Report(
+    args.propertyId,
+    accessToken,
+    {
+      dateRanges: [{ startDate: args.date, endDate: args.date }],
+      metrics: [{ name: 'sessions' }],
+    },
+    'validação de credenciais',
+  )
+}

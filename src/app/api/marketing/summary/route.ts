@@ -10,7 +10,11 @@
 // reviewing that consumer):
 //   {
 //     period, ga4, metaAds,      // current period — see PlatformResult
-//     attribution,               // AttributionSummary, always computed live
+//     attribution,               // AttributionSummary | {error: string} —
+//                                // always computed live (local query, not
+//                                // an external API, so never cached); a
+//                                // failure is isolated as {error} instead
+//                                // of turning the whole route into a 500
 //     previous: { ga4, metaAds }, // same shapes, previous-period window
 //     fetchedAt,                  // ISO timestamp of THIS response
 //   }
@@ -221,7 +225,17 @@ export async function GET(request: Request) {
           return metaAdsSummary({ accessToken, adAccountId: config.adAccountId as string, period: win })
         },
       }),
-      attributionSummary(ctx.supabase, ctx.accountId, { start: window.start, end: window.end }),
+      // Mesmo isolamento de erro dos fetchers de plataforma: uma falha na
+      // query de atribuição vira `attribution: {error}` na resposta em vez
+      // de derrubar a rota inteira (e descartar GA4/Meta que sucederam).
+      attributionSummary(ctx.supabase, ctx.accountId, {
+        start: window.start,
+        end: window.end,
+      }).catch((err: unknown): { error: string } => {
+        const message = err instanceof Error ? err.message : 'Erro desconhecido'
+        console.error('[marketing/summary] attribution failed:', message)
+        return { error: message }
+      }),
     ])
 
     return NextResponse.json({
