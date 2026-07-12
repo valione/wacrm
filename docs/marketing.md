@@ -108,6 +108,9 @@ tabela mostra um aviso explicando este passo.
 - **Anúncio** — anúncios "Clique para WhatsApp" (CTWA) entregam metadados de
   origem na primeira mensagem (ad_id, headline). Funciona no provedor Meta
   oficial; no Uazapi depende do payload do servidor (confirmar no E2E).
+  **No provedor WAHA a atribuição de anúncio não funciona** — o webhook da
+  WAHA não entrega o referral do CTWA (fora do escopo atual), então essas
+  conversas caem em "Diretas / outras" mesmo com GA4/Meta configurados.
 - **Site** — marcador `[ref:]` da seção 3.
 - **Direto / outras** — sem referral e sem marcador.
 
@@ -120,6 +123,10 @@ tabela mostra um aviso explicando este passo.
 - Se o lead **apagar o texto pré-preenchido** antes de enviar, o marcador
   `[ref:]` se perde e a conversa cai em "Direto / outras".
 - Sem UTM/pixel nesta fase; sem receita/ROAS.
+- No gráfico diário, os dias do Meta Ads seguem o fuso da conta de anúncios
+  e as conversas seguem UTC — gasto feito no fim do dia pode aparecer um
+  dia deslocado em relação à linha de conversas. Os totais do período não
+  são afetados.
 - Dados das plataformas ficam em cache por **1 hora**. Se uma atualização
   falhar, o painel serve os últimos dados obtidos com um aviso.
 - O investimento é exibido na moeda padrão do CRM — mantenha a conta de

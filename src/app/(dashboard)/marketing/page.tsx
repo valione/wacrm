@@ -11,7 +11,7 @@
 // stale notice; {error} only = error card with a "reconfigure" path that
 // never takes down the other platforms.
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import {
@@ -99,11 +99,19 @@ export default function MarketingPage() {
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(false)
 
+  // Um fetch em voo por período: um duplo clique na aba (ou dois "tentar
+  // novamente" seguidos) dispararia duas chamadas concorrentes ao summary
+  // — no cache miss, ambas bateriam nas APIs do GA4/Meta gastando cota, e
+  // a que resolvesse por último sobrescreveria a outra.
+  const inFlight = useRef<Set<Period>>(new Set())
+
   // Sem setState síncrono aqui — quem chama (handlers de evento) liga o
   // loading antes; o effect inicial conta com o estado inicial `true`
   // (mesmo padrão do dashboard, exigido pela regra set-state-in-effect).
   const loadPeriod = useCallback(
     (p: Period) => {
+      if (inFlight.current.has(p)) return
+      inFlight.current.add(p)
       const summaryPromise = fetch(`/api/marketing/summary?period=${p}`, { cache: 'no-store' })
         .then(async (res) => {
           if (!res.ok) throw new Error(`HTTP ${res.status}`)
@@ -120,7 +128,10 @@ export default function MarketingPage() {
           console.error('[marketing] summary failed:', err)
           setLoadError(true)
         })
-        .finally(() => setLoading(false))
+        .finally(() => {
+          inFlight.current.delete(p)
+          setLoading(false)
+        })
     },
     [],
   )
@@ -243,7 +254,9 @@ export default function MarketingPage() {
                 // flip the arrow tone so a cheaper lead reads green.
                 { invert: true },
               )}
-              subtitle={ads && ads.leads > 0 ? undefined : t('cards.needsLeads')}
+              subtitle={
+                !ads ? t('cards.needsMeta') : ads.leads > 0 ? undefined : t('cards.needsLeads')
+              }
             />
             <MetricCard
               title={t('cards.sessions')}
