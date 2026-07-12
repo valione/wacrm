@@ -57,6 +57,9 @@ describe('uazapi-webhook helpers', () => {
     })
     // messageTimestamp já vem em ms (ao contrário da WAHA, que usa segundos).
     expect(n!.timestamp.toISOString()).toBe('2026-01-09T22:40:00.000Z')
+    // A Uazapi não expõe referral de anúncio (CTWA) no schema Message —
+    // adReferral é sempre null até confirmação de payload real no E2E.
+    expect(n!.adReferral).toBe(null)
   })
 
   it('normalizeUazapiMessage tolera texto em `content` (string) quando `text` está ausente', async () => {

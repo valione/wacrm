@@ -119,5 +119,12 @@ export function normalizeUazapiMessage(
     replyToExternalId: data.quoted || null,
     interactiveReplyId: null,
     fromMe: data.fromMe,
+    // O schema Message do OpenAPI da Uazapi (consultado na Task 4) NÃO expõe
+    // um campo de referral/CTWA/adsSourceUrl equivalente ao `message.referral`
+    // da Meta — os campos próximos (`source`, `track_source`, `track_id`) são
+    // genéricos de rastreamento, não o payload de anúncio click-to-WhatsApp.
+    // Deixamos null; confirmar payload real de uma conversa vinda de anúncio
+    // no E2E antes de mapear qualquer campo.
+    adReferral: null,
   }
 }

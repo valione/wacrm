@@ -18,6 +18,7 @@ import { runAutomationsForTrigger } from '@/lib/automations/engine'
 import { dispatchInboundToFlows } from '@/lib/flows/engine'
 import { dispatchInboundToAiReply } from '@/lib/ai/auto-reply'
 import { dispatchWebhookEvent } from '@/lib/webhooks/deliver'
+import { extractSiteRef } from '@/lib/marketing/site-ref'
 
 // Lazy-initialized to avoid build-time crash when env vars are missing
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -43,6 +44,12 @@ export interface NormalizedInboundMessage {
   replyToExternalId: string | null
   interactiveReplyId: string | null
   fromMe: boolean               // eco de mensagem enviada pelo próprio número
+  // Payload cru de referral de anúncio click-to-WhatsApp, quando o provedor
+  // o entrega (Meta: `message.referral`). Objeto cru {source_id, source_type,
+  // source_url, headline, body, ...}, sem transformação. Só usado na captura
+  // de origem quando a conversa é criada; ausente/null na esmagadora maioria
+  // das mensagens.
+  adReferral?: Record<string, unknown> | null
 }
 
 // The happy-path status ladder — pending → sent → delivered → read →
@@ -550,6 +557,26 @@ export async function persistInboundMessage(
     .eq('sender_type', 'customer')
   const isFirstInboundMessage = (priorCustomerMsgCount ?? 0) === 0
 
+  // ============================================================
+  // Origin capture (ADITIVO).
+  //
+  // Só na PRIMEIRA mensagem de uma conversa recém-criada (convResult.created)
+  // e nunca em ecos fromMe (já retornaram acima). Detecta o marcador de site
+  // `[ref:<slug>]` no texto e, quando presente, persiste o texto SEM o
+  // marcador; captura também o adReferral cru do provedor (anúncio CTWA).
+  // Fora desse caso, `contentTextToStore === contentText` e nada muda em
+  // relação ao comportamento anterior.
+  let contentTextToStore = contentText
+  let capturedSiteRef: string | null = null
+  const capturedAdReferral = convResult.created ? (normalized.adReferral ?? null) : null
+  if (convResult.created && contentText) {
+    const { ref, cleanText } = extractSiteRef(contentText)
+    if (ref !== null) {
+      capturedSiteRef = ref
+      contentTextToStore = cleanText // só troca quando havia marcador
+    }
+  }
+
   // Insert message — field names MUST match the messages table schema
   // (see supabase/migrations/001_initial_schema.sql):
   //   conversation_id, sender_type, content_type, content_text,
@@ -558,7 +585,7 @@ export async function persistInboundMessage(
     conversation_id: conversation.id,
     sender_type: 'customer',
     content_type: contentType,
-    content_text: contentText,
+    content_text: contentTextToStore,
     media_url: mediaUrl,
     message_id: normalized.externalId,
     status: 'delivered',
@@ -575,15 +602,22 @@ export async function persistInboundMessage(
     return
   }
 
-  // Update conversation
+  // Update conversation. The origin fields (site_ref / ad_referral) piggyback
+  // on this same UPDATE — a single write, only when the conversation was just
+  // created and an origin was actually captured; otherwise the update object
+  // is byte-for-byte what it was before this feature.
+  const convUpdate: Record<string, unknown> = {
+    last_message_text: contentTextToStore || `[${contentType}]`,
+    last_message_at: new Date().toISOString(),
+    unread_count: (conversation.unread_count || 0) + 1,
+    updated_at: new Date().toISOString(),
+  }
+  if (capturedSiteRef) convUpdate.site_ref = capturedSiteRef
+  if (capturedAdReferral) convUpdate.ad_referral = capturedAdReferral
+
   const { error: convError } = await supabaseAdmin()
     .from('conversations')
-    .update({
-      last_message_text: contentText || `[${contentType}]`,
-      last_message_at: new Date().toISOString(),
-      unread_count: (conversation.unread_count || 0) + 1,
-      updated_at: new Date().toISOString(),
-    })
+    .update(convUpdate)
     .eq('id', conversation.id)
 
   if (convError) {

@@ -170,6 +170,7 @@ export function MessageThread({
   onToggleContactPanel,
 }: MessageThreadProps) {
   const t = useTranslations("Inbox.messageThread");
+  const tOrigin = useTranslations("Inbox.origin");
   const tTimer = useTranslations("Inbox.sessionTimer");
   const tQuote = useTranslations("Inbox.replyQuote");
 
@@ -913,7 +914,21 @@ export function MessageThread({
             {displayName.charAt(0).toUpperCase()}
           </div>
           <div className="min-w-0">
-            <h2 className="truncate text-sm font-semibold text-foreground">{displayName}</h2>
+            <div className="flex items-center gap-1.5">
+              <h2 className="truncate text-sm font-semibold text-foreground">{displayName}</h2>
+              {/* Origem da conversa (captura de marketing): "Anúncio" quando
+                  veio de um anúncio CTWA, senão "Site" quando veio de um
+                  marcador [ref:] do site. Ad_referral tem precedência. */}
+              {conversation.ad_referral ? (
+                <Badge variant="outline" className="flex-shrink-0 border-border text-[10px]">
+                  {tOrigin("ad")}
+                </Badge>
+              ) : conversation.site_ref ? (
+                <Badge variant="outline" className="flex-shrink-0 border-border text-[10px]">
+                  {tOrigin("site")}
+                </Badge>
+              ) : null}
+            </div>
             <p className="truncate text-xs text-muted-foreground">{contact.phone}</p>
           </div>
           {/* Session timer badge — hidden on the narrowest phones so

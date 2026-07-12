@@ -94,5 +94,9 @@ export function normalizeWahaMessage(
     replyToExternalId: payload.replyTo ?? null,
     interactiveReplyId: null,
     fromMe: payload.fromMe,
+    // Origem de anúncio (CTWA) fora de escopo na WAHA: o payload do WhatsApp
+    // Web JS não expõe o referral de anúncio de forma estável, então não há
+    // o que mapear aqui — deixamos null.
+    adReferral: null,
   }
 }

@@ -168,6 +168,10 @@
       "today": "Today",
       "yesterday": "Yesterday"
     },
+    "origin": {
+      "ad": "Ad",
+      "site": "Site"
+    },
     "sessionTimer": {
       "expired": "Expired",
       "xhRemaining": "{hours}h remaining",

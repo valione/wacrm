@@ -168,6 +168,10 @@
       "today": "Hoje",
       "yesterday": "Ontem"
     },
+    "origin": {
+      "ad": "Anúncio",
+      "site": "Site"
+    },
     "sessionTimer": {
       "expired": "Expirada",
       "xhRemaining": "{hours}h restantes",

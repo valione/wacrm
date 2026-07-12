@@ -63,6 +63,13 @@ interface WhatsAppMessage {
   }
   /** Present when the customer swipe-replies to one of our messages. */
   context?: { id: string }
+  /**
+   * Present when the conversation was opened from a click-to-WhatsApp ad
+   * (Meta Cloud API `referral` object). Carries source_id / source_type /
+   * source_url / headline / body / media_type etc. We pass it through raw
+   * for origin attribution — never transformed here.
+   */
+  referral?: Record<string, unknown>
 }
 
 interface WhatsAppWebhookEntry {
@@ -472,6 +479,9 @@ async function processMessage(
     replyToExternalId: message.context?.id ?? null,
     interactiveReplyId,
     fromMe: false,
+    // Ad click-to-WhatsApp referral, passed through raw for origin capture.
+    // Present only on the first message of an ad-sourced conversation.
+    adReferral: message.referral ?? null,
   }
 
   await persistInboundMessage(normalized, accountId, configOwnerUserId)
