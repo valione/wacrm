@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
+import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { useTotalUnread } from "@/hooks/use-total-unread";
 import { useUnreadNotifications } from "@/hooks/use-unread-notifications";
@@ -13,6 +14,7 @@ import {
   Crown,
   GitBranch,
   LayoutDashboard,
+  LineChart,
   LogOut,
   MessageSquare,
   Radio,
@@ -91,6 +93,7 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { href: "/dashboard", labelKey: "dashboard", icon: LayoutDashboard },
+  { href: "/marketing", labelKey: "marketing", icon: LineChart },
   { href: "/inbox", labelKey: "inbox", icon: MessageSquare },
   { href: "/notifications", labelKey: "notifications", icon: Bell },
   { href: "/contacts", labelKey: "contacts", icon: Users },
@@ -119,6 +122,32 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
   const { profile, profileLoading, account, accountRole, signOut } = useAuth();
   const totalUnread = useTotalUnread();
   const unreadNotifications = useUnreadNotifications();
+
+  // Marketing nav gate: the page only makes sense with ≥1 integration
+  // configured, so members without one don't see the item. Admins/owners
+  // always see it (the page's empty state walks them to Settings). The
+  // RLS SELECT policy already scopes marketing_integrations to accounts
+  // the user belongs to — one row is enough to open the gate.
+  const [hasMarketingIntegration, setHasMarketingIntegration] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    void createClient()
+      .from("marketing_integrations")
+      .select("platform")
+      .limit(1)
+      .then(({ data }) => {
+        if (!cancelled && data && data.length > 0) {
+          setHasMarketingIntegration(true);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const showMarketing =
+    hasMarketingIntegration ||
+    accountRole === "admin" ||
+    accountRole === "owner";
   // Only surface the account-name strip when it actually carries
   // information. A solo user's personal account is named after them
   // (the 017 signup trigger seeds it from `full_name`), so showing it
@@ -208,7 +237,9 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
         {/* Main navigation */}
         <nav className="flex-1 overflow-y-auto px-3 py-4">
           <ul className="flex flex-col gap-1">
-            {navItems.map((item) => {
+            {navItems
+              .filter((item) => item.href !== "/marketing" || showMarketing)
+              .map((item) => {
               const isActive =
                 pathname === item.href ||
                 (item.href !== "/dashboard" && pathname.startsWith(item.href));
