@@ -77,6 +77,45 @@ describe('waha-webhook helpers', () => {
     expect(buildMediaProxyUrl('/api/whatsapp/waha/media', decoded!)).toBe(n!.mediaUrl)
   })
 
+  it('normalizeWahaMessage aceita contraparte @lid já traduzida pela rota (telefone real)', async () => {
+    // Simula o que a ROTA faz antes de chamar normalize: quando o payload
+    // original trazia 'from' terminado em '@lid', ela resolve via
+    // getLidPhone e substitui o campo pelo `pn` retornado (ex.:
+    // '5511981453314@c.us') antes de invocar esta função pura.
+    const { normalizeWahaMessage } = await import('./waha-webhook')
+    const n = normalizeWahaMessage({
+      id: 'false_5511981453314@c.us_XYZ',
+      from: '5511981453314@c.us',
+      fromMe: false,
+      body: 'oi via LID',
+      hasMedia: false,
+      timestamp: 1767998400,
+    }, '/api/whatsapp/waha/media')
+    expect(n).toMatchObject({
+      fromPhone: '5511981453314',
+      contentText: 'oi via LID',
+    })
+  })
+
+  it('normalizeWahaMessage aceita contraparte @lid bruta sem retornar null (tradução é responsabilidade da rota)', async () => {
+    // normalize é pura/síncrona e não faz a chamada de rede que traduz o
+    // LID — por isso ela não rejeita o sufixo @lid (evita voltar a
+    // descartar a mensagem silenciosamente), mas também não inventa um
+    // telefone: fromPhone aqui é o LID cru, exatamente o motivo pelo qual
+    // a ROTA deve sempre substituir o campo antes de chamar normalize.
+    const { normalizeWahaMessage } = await import('./waha-webhook')
+    const n = normalizeWahaMessage({
+      id: 'x',
+      from: '138061891522811@lid',
+      fromMe: false,
+      body: 'oi',
+      hasMedia: false,
+      timestamp: 1,
+    }, '/api/whatsapp/waha/media')
+    expect(n).not.toBe(null)
+    expect(n!.fromPhone).toBe('138061891522811')
+  })
+
   it('ignora eventos de grupo (sufixo @g.us)', async () => {
     const { normalizeWahaMessage } = await import('./waha-webhook')
     const n = normalizeWahaMessage({ id: 'x', from: '5511-123@g.us', fromMe: false, body: 'oi',

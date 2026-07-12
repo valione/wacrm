@@ -50,14 +50,30 @@ const MIME_TO_CONTENT: Array<[RegExp, NormalizedInboundMessage['contentType']]> 
   [/^audio\//, 'audio'],
 ]
 
-/** Retorna null para eventos que a fase 1 não ingere (grupos, status@broadcast). */
+/**
+ * Retorna null para eventos que a fase 1 não ingere (grupos, status@broadcast).
+ *
+ * Aceita contrapartes '@lid' (formato de privacidade que o WhatsApp moderno
+ * usa em vez do telefone). Esta função é síncrona/pura e NÃO traduz o LID —
+ * isso exigiria uma chamada de rede (GET /lids na WAHA). Quem chama
+ * (a rota do webhook) é responsável por, ANTES de invocar normalize,
+ * resolver o LID pro telefone real via getLidPhone e substituir o campo
+ * no payload; se a tradução falhar, a rota descarta o evento sem chamar
+ * esta função. Aceitar '@lid' aqui é defensivo — garante que um payload já
+ * traduzido (que termina em @c.us/@s.whatsapp.net) sempre passa, e nunca
+ * derruba silenciosamente um evento só por causa do sufixo.
+ */
 export function normalizeWahaMessage(
   payload: WahaMessagePayload,
   mediaProxyPath: string,
 ): NormalizedInboundMessage | null {
   // fromMe: o interlocutor é o 'to'; inbound: é o 'from'.
   const counterpart = payload.fromMe ? payload.to ?? payload.from : payload.from
-  if (!counterpart.endsWith('@c.us') && !counterpart.endsWith('@s.whatsapp.net')) return null
+  if (
+    !counterpart.endsWith('@c.us') &&
+    !counterpart.endsWith('@s.whatsapp.net') &&
+    !counterpart.endsWith('@lid')
+  ) return null
 
   let contentType: NormalizedInboundMessage['contentType'] = 'text'
   let mediaUrl: string | null = null

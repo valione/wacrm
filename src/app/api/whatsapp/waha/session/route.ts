@@ -17,6 +17,7 @@ import {
   wahaEnabled,
   wahaSessionName,
   createSession,
+  restartSession,
   getSession,
   logoutAndDelete,
   fromChatId,
@@ -64,6 +65,44 @@ export async function POST() {
   // Evita barra duplicada caso NEXT_PUBLIC_SITE_URL venha com trailing
   // slash (mesmo saneamento que wahaBase() faz para WAHA_URL).
   const webhookUrl = `${site.replace(/\/$/, '')}/api/whatsapp/webhook/waha`
+
+  // Idempotência: clicar "Conectar" com a sessão já existente não pode
+  // chamar createSession de novo — a WAHA responde 422 "already exists" e
+  // isso virava 500 no log (observado 2x no teste E2E). Consultamos o
+  // status ANTES de decidir o que fazer.
+  let current: Awaited<ReturnType<typeof getSession>> | null = null
+  try {
+    current = await getSession({ session })
+  } catch {
+    // 404 (sessão nunca existiu) ou servidor indisponível — segue pro
+    // fluxo de criação abaixo, igual ao caminho de hoje.
+    current = null
+  }
+
+  if (current) {
+    if (current.status === 'WORKING' || current.status === 'STARTING' || current.status === 'SCAN_QR_CODE') {
+      // Sessão já viva ou conectando — não recriar. O GET de polling da UI
+      // cuida do resto. Regra final: NUNCA logout/delete numa sessão nesse
+      // estado, isso desconectaria o usuário.
+      return NextResponse.json({ session })
+    }
+    // STOPPED/FAILED: a sessão existe mas está parada — reiniciar em vez
+    // de recriar do zero. Se o restart falhar, cai pro fallback de
+    // logout+delete+create (só é seguro aqui porque já confirmamos que o
+    // status NÃO é WORKING/STARTING/SCAN_QR_CODE).
+    try {
+      await restartSession({ session })
+      return NextResponse.json({ session })
+    } catch (err) {
+      console.error('[waha/session POST] restartSession falhou, recriando do zero:', err)
+      try {
+        await logoutAndDelete({ session })
+      } catch (cleanupErr) {
+        console.error('[waha/session POST] logoutAndDelete pré-recriação falhou:', cleanupErr)
+      }
+    }
+  }
+
   try {
     await createSession({ session, webhookUrl })
   } catch (err) {

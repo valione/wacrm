@@ -54,44 +54,45 @@ export interface WahaSessionInfo {
   me?: { id: string; pushName?: string }
 }
 
-/** Cria (ou recria) e inicia a sessão, já apontando o webhook de volta pro CRM. */
+/**
+ * Cria e inicia uma sessão NOVA, já apontando o webhook de volta pro CRM.
+ *
+ * Não tenta se auto-recuperar de "sessão já existe" (422) — isso exigiria
+ * decidir sozinha se é seguro derrubar a sessão atual, e esta função não
+ * sabe o status dela. Quem decide isso é a rota (POST /api/whatsapp/waha/
+ * session), que consulta `getSession` ANTES de chamar `createSession` e só
+ * chega aqui quando não há sessão prévia — ver reconexão em restartSession.
+ */
 export async function createSession(args: { session: string; webhookUrl: string }): Promise<void> {
-  const doCreate = () =>
-    wahaFetch('/api/sessions', {
-      method: 'POST',
-      body: JSON.stringify({
-        name: args.session,
-        start: true,
-        config: {
-          webhooks: [
-            {
-              url: args.webhookUrl,
-              // `message.any` cobre TANTO as recebidas QUANTO os ecos fromMe
-              // (o evento `message` sozinho NÃO entrega fromMe). Não assinar
-              // `message` junto senão as recebidas chegam duplicadas.
-              events: ['message.any', 'message.ack', 'session.status'],
-              hmac: { key: process.env.WAHA_WEBHOOK_SECRET ?? '' },
-            },
-          ],
-        },
-      }),
-    })
+  await wahaFetch('/api/sessions', {
+    method: 'POST',
+    body: JSON.stringify({
+      name: args.session,
+      start: true,
+      config: {
+        webhooks: [
+          {
+            url: args.webhookUrl,
+            // `message.any` cobre TANTO as recebidas QUANTO os ecos fromMe
+            // (o evento `message` sozinho NÃO entrega fromMe). Não assinar
+            // `message` junto senão as recebidas chegam duplicadas.
+            events: ['message.any', 'message.ack', 'session.status'],
+            hmac: { key: process.env.WAHA_WEBHOOK_SECRET ?? '' },
+          },
+        ],
+      },
+    }),
+  })
+}
 
-  try {
-    await doCreate()
-  } catch (err) {
-    // Reconexão pós-queda: se o celular derrubou a sessão mas ela ainda
-    // existe no servidor WAHA (ex.: um DELETE anterior falhou com a WAHA
-    // fora do ar), o POST responde 422 "already exists". Limpamos a sessão
-    // órfã (logoutAndDelete tolera 404) e tentamos criar UMA vez mais; se
-    // falhar de novo, propagamos.
-    if (err instanceof Error && /: 422\b/.test(err.message) && /already exists/i.test(err.message)) {
-      await logoutAndDelete({ session: args.session })
-      await doCreate()
-      return
-    }
-    throw err
-  }
+/**
+ * Reinicia uma sessão existente (tipicamente STOPPED/FAILED) preservando a
+ * config de webhook já cadastrada — usado pela reconexão idempotente do
+ * POST /session em vez de recriar do zero. Propaga erro; quem chama decide
+ * o fallback (ex.: logoutAndDelete + createSession).
+ */
+export async function restartSession(args: { session: string }): Promise<void> {
+  await wahaFetch(`/api/sessions/${encodeURIComponent(args.session)}/restart`, { method: 'POST' })
 }
 
 export async function getSession(args: { session: string }): Promise<WahaSessionInfo> {
@@ -164,6 +165,25 @@ export async function wahaSendMedia(args: {
   const id = typeof data.id === 'string' ? data.id : data.id?._serialized
   if (!id) throw new Error(`WAHA ${WAHA_MEDIA_PATHS[args.kind]}: resposta sem id`)
   return { messageId: id }
+}
+
+/**
+ * Traduz um remetente no formato LID de privacidade ('<id>@lid') pro
+ * telefone real via GET /api/{session}/lids/{lid}. O WhatsApp moderno
+ * entrega `from`/`to` assim quando o remetente usa o modo de privacidade
+ * de identidade — sem tradução, `fromChatId` devolveria o LID cru (não é
+ * telefone). Falha de tradução (404, servidor fora do ar, resposta sem
+ * `pn`) não pode derrubar o processamento do webhook: engolimos o erro e
+ * devolvemos null, deixando o chamador decidir descartar o evento.
+ */
+export async function getLidPhone(args: { session: string; lid: string }): Promise<string | null> {
+  try {
+    const r = await wahaFetch(`/api/${encodeURIComponent(args.session)}/lids/${encodeURIComponent(args.lid)}`)
+    const data = await r.json()
+    return typeof data?.pn === 'string' && data.pn ? data.pn : null
+  } catch {
+    return null
+  }
 }
 
 /** Baixa mídia hospedada no WAHA com a API key. Só aceita URLs do próprio servidor. */

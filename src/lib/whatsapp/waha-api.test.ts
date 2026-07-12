@@ -70,38 +70,69 @@ describe('waha-api', () => {
     expect(events).toEqual(['message.any', 'message.ack', 'session.status'])
   })
 
-  it('createSession recupera de sessão órfã: 422 already exists -> logout+delete -> retry', async () => {
+  it('createSession propaga o erro em non-2xx sem tentar se auto-recuperar (a decisão é da rota)', async () => {
     const mock = fetch as ReturnType<typeof vi.fn>
-    // 1º POST /api/sessions: 422 already exists (sessão órfã pós-queda)
-    // 2º logout, 3º delete (logoutAndDelete), 4º POST /api/sessions: 201 ok
-    mock
-      .mockResolvedValueOnce(new Response('{"message":"Session \'s1\' already exists"}', { status: 422 }))
-      .mockResolvedValueOnce(new Response('{}', { status: 200 })) // logout
-      .mockResolvedValueOnce(new Response('{}', { status: 200 })) // delete
-      .mockResolvedValueOnce(new Response('{}', { status: 201 })) // retry create
+    mock.mockResolvedValue(new Response('{"message":"Session \'s1\' already exists"}', { status: 422 }))
     const { createSession } = await import('./waha-api')
     await expect(
       createSession({ session: 's1', webhookUrl: 'http://crm.local/api/whatsapp/webhook/waha' }),
-    ).resolves.toBeUndefined()
-    const paths = mock.mock.calls.map((c) => new URL(c[0] as string).pathname)
-    expect(paths).toEqual([
-      '/api/sessions',
-      '/api/sessions/s1/logout',
-      '/api/sessions/s1',
-      '/api/sessions',
-    ])
+    ).rejects.toThrow(/422/)
+    // Só uma chamada — nada de logout/delete automático aqui, pois esta
+    // função não sabe se a sessão existente está WORKING (e derrubá-la
+    // desconectaria o usuário). Essa decisão é da rota, que consulta
+    // getSession antes de chamar createSession.
+    expect(mock.mock.calls).toHaveLength(1)
   })
 
-  it('createSession propaga se o retry pós-limpeza também falhar', async () => {
+  it('restartSession faz POST /api/sessions/{session}/restart', async () => {
     const mock = fetch as ReturnType<typeof vi.fn>
-    mock
-      .mockResolvedValueOnce(new Response('{"message":"Session already exists"}', { status: 422 }))
-      .mockResolvedValueOnce(new Response('{}', { status: 200 })) // logout
-      .mockResolvedValueOnce(new Response('{}', { status: 200 })) // delete
-      .mockResolvedValueOnce(new Response('{"message":"boom"}', { status: 500 })) // retry falha
-    const { createSession } = await import('./waha-api')
-    await expect(
-      createSession({ session: 's1', webhookUrl: 'http://crm.local/api/whatsapp/webhook/waha' }),
-    ).rejects.toThrow(/500/)
+    mock.mockResolvedValue(new Response('{}', { status: 200 }))
+    const { restartSession } = await import('./waha-api')
+    await expect(restartSession({ session: 's1' })).resolves.toBeUndefined()
+    const [url, init] = mock.mock.calls[0]
+    expect(url).toBe('http://waha.local:3001/api/sessions/s1/restart')
+    expect(init?.method).toBe('POST')
+  })
+
+  it('restartSession propaga erro em non-2xx', async () => {
+    const mock = fetch as ReturnType<typeof vi.fn>
+    mock.mockResolvedValue(new Response('{"message":"boom"}', { status: 500 }))
+    const { restartSession } = await import('./waha-api')
+    await expect(restartSession({ session: 's1' })).rejects.toThrow(/500/)
+  })
+
+  it('getLidPhone traduz LID -> telefone via GET /api/{session}/lids/{lid}', async () => {
+    const mock = fetch as ReturnType<typeof vi.fn>
+    mock.mockResolvedValue(
+      new Response(JSON.stringify({ lid: '138061891522811@lid', pn: '5511981453314@c.us' }), { status: 200 }),
+    )
+    const { getLidPhone } = await import('./waha-api')
+    const pn = await getLidPhone({ session: 's1', lid: '138061891522811@lid' })
+    expect(pn).toBe('5511981453314@c.us')
+    const [url] = mock.mock.calls[0]
+    expect(url).toBe(
+      'http://waha.local:3001/api/s1/lids/' + encodeURIComponent('138061891522811@lid'),
+    )
+  })
+
+  it('getLidPhone retorna null em 404 sem lançar (falha de tradução não pode derrubar o webhook)', async () => {
+    const mock = fetch as ReturnType<typeof vi.fn>
+    mock.mockResolvedValue(new Response('{"message":"not found"}', { status: 404 }))
+    const { getLidPhone } = await import('./waha-api')
+    await expect(getLidPhone({ session: 's1', lid: 'x@lid' })).resolves.toBe(null)
+  })
+
+  it('getLidPhone retorna null se fetch lançar (servidor fora do ar)', async () => {
+    const mock = fetch as ReturnType<typeof vi.fn>
+    mock.mockRejectedValue(new Error('network down'))
+    const { getLidPhone } = await import('./waha-api')
+    await expect(getLidPhone({ session: 's1', lid: 'x@lid' })).resolves.toBe(null)
+  })
+
+  it('getLidPhone retorna null se a resposta não tiver campo pn', async () => {
+    const mock = fetch as ReturnType<typeof vi.fn>
+    mock.mockResolvedValue(new Response(JSON.stringify({ lid: 'x@lid' }), { status: 200 }))
+    const { getLidPhone } = await import('./waha-api')
+    await expect(getLidPhone({ session: 's1', lid: 'x@lid' })).resolves.toBe(null)
   })
 })

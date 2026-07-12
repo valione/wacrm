@@ -7,7 +7,7 @@ import { NextRequest, NextResponse, after } from 'next/server'
 import { supabaseAdmin } from '@/lib/automations/admin-client'
 import { verifyWahaHmac, normalizeWahaMessage, mapAckToStatus } from '@/lib/whatsapp/waha-webhook'
 import { persistInboundMessage, applyStatusByExternalId } from '@/lib/whatsapp/inbound'
-import { wahaEnabled } from '@/lib/whatsapp/waha-api'
+import { wahaEnabled, getLidPhone } from '@/lib/whatsapp/waha-api'
 
 // O callback do `after()` em POST roda dentro do maxDuration desta rota.
 // Mesmo tuning do webhook Meta — dá margem para o processamento
@@ -46,10 +46,22 @@ export async function POST(request: NextRequest) {
       // `message.any` é o evento assinado (cobre recebidas + ecos fromMe).
       // Aceitamos também `message` por robustez entre versões da WAHA.
       if (event.event === 'message.any' || event.event === 'message') {
-        const normalized = normalizeWahaMessage(
-          event.payload as Parameters<typeof normalizeWahaMessage>[0],
-          '/api/whatsapp/waha/media',
-        )
+        const payload = event.payload as Parameters<typeof normalizeWahaMessage>[0]
+        // WhatsApp moderno pode entregar o remetente no formato de
+        // privacidade '<id>@lid' em vez do telefone. normalizeWahaMessage é
+        // pura e não traduz — resolvemos aqui ANTES de chamar normalize.
+        // fromMe: o campo relevante é 'to' (interlocutor); inbound: 'from'.
+        const counterpartField = payload.fromMe ? (payload.to ?? payload.from) : payload.from
+        if (counterpartField.endsWith('@lid')) {
+          const pn = await getLidPhone({ session: event.session, lid: counterpartField })
+          if (!pn) {
+            console.warn('[webhook/waha] LID sem tradução, descartando', counterpartField)
+            return
+          }
+          if (payload.fromMe) payload.to = pn
+          else payload.from = pn
+        }
+        const normalized = normalizeWahaMessage(payload, '/api/whatsapp/waha/media')
         if (normalized) await persistInboundMessage(normalized, config.account_id, config.user_id)
       } else if (event.event === 'message.ack') {
         const p = event.payload as { id: string; ack: number; timestamp?: number }
