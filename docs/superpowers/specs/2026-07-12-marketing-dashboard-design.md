@@ -54,7 +54,7 @@ conversa no WhatsApp). Modelo de uso: uma instalação por cliente, admin único
 4. **Atribuição de origem das conversas (três mecanismos):**
    - **Anúncio:** anúncios "Clique para WhatsApp" entregam metadados de
      origem (referral: source_id/ad_id, headline) na primeira mensagem.
-     Migração adiciona `conversations.ad_referral JSONB` (nullable); o
+     Migração adiciona `conversations.ad_referral JSONB` e `conversations.site_ref TEXT`.(nullable); o
      pipeline inbound grava quando o provedor entregar (Meta oficial:
      `message.referral`; Uazapi: campo equivalente no payload — confirmar
      nome exato no E2E e implementar tolerante).
@@ -78,7 +78,7 @@ conversa no WhatsApp). Modelo de uso: uma instalação por cliente, admin único
   ('ga4','meta_ads','google_ads'), credentials TEXT criptografado, config
   JSONB p/ ids não-secretos, UNIQUE(account_id, platform), RLS por conta),
   `marketing_cache` (chave conta+platform+period, payload JSONB, fetched_at),
-  `conversations.ad_referral JSONB`.
+  `conversations.ad_referral JSONB` e `conversations.site_ref TEXT`.
 - **Clientes de API** (`src/lib/marketing/ga4.ts`, `meta-ads.ts`,
   `google-ads.ts` na leva 2): fetch puro, sem SDKs pesados; GA4 via
   `runReport` da Data API com JWT da service account; Meta via Graph API
