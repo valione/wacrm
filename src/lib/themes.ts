@@ -23,7 +23,10 @@ export const THEME_IDS = [
 
 export type ThemeId = (typeof THEME_IDS)[number];
 
-export const DEFAULT_THEME: ThemeId = "violet";
+// Cobalt (azul) é a cor da marca Display4 — padrão para todos os
+// usuários. Quem já escolheu outro tema no picker mantém a escolha
+// (localStorage prevalece sobre o default).
+export const DEFAULT_THEME: ThemeId = "cobalt";
 
 export const STORAGE_KEY = "wacrm.theme";
 

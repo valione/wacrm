@@ -90,7 +90,7 @@ function LoginPageInner() {
               // SVG não passa pelo otimizador do Next (que bloqueia o tipo
               // por padrão — 400 "image type is not allowed").
               unoptimized
-              className="mb-2"
+              className="mx-auto mb-2"
             />
           )}
           <CardTitle className="text-xl text-foreground">
