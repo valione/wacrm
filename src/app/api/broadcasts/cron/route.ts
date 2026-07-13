@@ -22,7 +22,12 @@ export async function GET(request: Request) {
   if (!expected) {
     return NextResponse.json({ error: 'cron not configured' }, { status: 503 })
   }
-  const supplied = request.headers.get('x-cron-secret')
+  // Header OU query (?secret=) — pingers gratuitos (cron-job.org,
+  // UptimeRobot) nem sempre enviam headers customizados. Mesmo padrão de
+  // segredo-na-URL do webhook Uazapi.
+  const supplied =
+    request.headers.get('x-cron-secret') ??
+    new URL(request.url).searchParams.get('secret')
   if (supplied !== expected) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }

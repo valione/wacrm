@@ -9,7 +9,13 @@ Convenção: **minor** (1.1 → 1.2) a cada deploy com ajustes e novidades;
 aparece no rodapé do app; cada versão publicada ganha uma tag git
 (`v1.0.0`, `v1.1.0`, ...).
 
-## v1.1 — não publicada
+## v1.2 — não publicada
+
+- Rotas de cron (transmissões, automações, fluxos) aceitam o segredo
+  também pela URL (`?secret=`), viabilizando pingers gratuitos que não
+  enviam headers (cron-job.org, UptimeRobot).
+
+## v1.1 — 2026-07-12
 
 - Azul (Cobalt, cor da marca) como tema padrão para todos os usuários.
 - Logo centralizado na tela de login.

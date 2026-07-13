@@ -35,7 +35,12 @@ export async function GET(request: Request) {
   // can't recover the secret byte-by-byte from response-time deltas.
   // Length pre-check is required by timingSafeEqual (throws otherwise)
   // and leaks only the length itself, which isn't sensitive.
-  const supplied = request.headers.get('x-cron-secret') ?? ''
+  // Header OU query (?secret=) — pingers gratuitos nem sempre enviam
+  // headers customizados (mesmo padrão do cron de broadcasts).
+  const supplied =
+    request.headers.get('x-cron-secret') ??
+    new URL(request.url).searchParams.get('secret') ??
+    ''
   const suppliedBuf = Buffer.from(supplied)
   const expectedBuf = Buffer.from(expected)
   if (
