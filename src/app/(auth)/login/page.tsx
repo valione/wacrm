@@ -79,12 +79,12 @@ function LoginPageInner() {
               <UsersRound className="h-6 w-6 text-primary" />
             </div>
           ) : (
-            // Logomarca completa (proporção original ~1,32:1) — fonte em
-            // CRM/branding/, cópia em public/brand/.
+            // Logomarca completa (proporção original ~0,69:1) — fonte em
+            // CRM/Campos Salles/branding/, cópia em public/brand/.
             <Image
-              src="/brand/display4-logo.svg"
+              src="/brand/campos-salles-logo.svg"
               alt={t('titleWelcome')}
-              width={132}
+              width={69}
               height={100}
               priority
               // SVG não passa pelo otimizador do Next (que bloqueia o tipo

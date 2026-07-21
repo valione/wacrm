@@ -220,12 +220,13 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
             close button is hidden since the sidebar is always-visible. */}
         <div className="flex h-14 shrink-0 items-center justify-between gap-2 border-b border-border px-4">
           <Link href="/dashboard" className="flex items-center gap-2">
-            {/* Ícone da marca (barras azuis) — fonte em CRM/branding/,
-                cópia em public/brand/. Proporção original ~1,68:1. */}
+            {/* Ícone da marca (monograma CS) — fonte em
+                CRM/Campos Salles/branding/, cópia em public/brand/.
+                Proporção original ~0,69:1. */}
             <Image
-              src="/brand/display4-icon.svg"
+              src="/brand/campos-salles-icon.svg"
               alt=""
-              width={40}
+              width={17}
               height={24}
               priority
               // SVG não passa pelo otimizador do Next (que bloqueia o tipo
