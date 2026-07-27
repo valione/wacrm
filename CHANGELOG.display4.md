@@ -9,6 +9,15 @@ Convenção: **minor** (1.1 → 1.2) a cada deploy com ajustes e novidades;
 aparece no rodapé do app; cada versão publicada ganha uma tag git
 (`v1.0.0`, `v1.1.0`, ...).
 
+## v1.6 — 2026-07-27
+
+- Automações com gatilho **"Tag adicionada"** agora funcionam de fato:
+  o bloco "Marcar contato" dos Fluxos passou a disparar as automações
+  da tag (com as variáveis capturadas disponíveis para interpolação,
+  ex.: título do card com {{vars.nome}}), e o gatilho agora respeita a
+  tag ESPECÍFICA configurada — antes, qualquer tag dispararia todas as
+  automações desse tipo.
+
 ## v1.5 — 2026-07-27
 
 - Novo bloco **"Atualizar contato"** nos Fluxos: grava as respostas

@@ -336,3 +336,34 @@ describe("triggerMatches — interactive_reply", () => {
     expect(triggerMatches(automation([]), { interactive_reply_id: "yes" })).toBe(false);
   });
 });
+
+describe("triggerMatches — tag_added", () => {
+  function tagAutomation(tag_id?: string): Automation {
+    return {
+      id: "a2",
+      account_id: ACCOUNT,
+      user_id: "u1",
+      name: "card de lead",
+      trigger_type: "tag_added",
+      trigger_config: tag_id ? { tag_id } : {},
+      is_active: true,
+      execution_count: 0,
+      created_at: "",
+      updated_at: "",
+    };
+  }
+
+  it("matches only the configured tag", () => {
+    expect(triggerMatches(tagAutomation("t-1"), { tag_id: "t-1" })).toBe(true);
+    expect(triggerMatches(tagAutomation("t-1"), { tag_id: "t-2" })).toBe(false);
+  });
+
+  it("does not fire without a tag in the context", () => {
+    expect(triggerMatches(tagAutomation("t-1"), {})).toBe(false);
+    expect(triggerMatches(tagAutomation("t-1"), undefined)).toBe(false);
+  });
+
+  it("a config missing tag_id matches nothing (not everything)", () => {
+    expect(triggerMatches(tagAutomation(undefined), { tag_id: "t-1" })).toBe(false);
+  });
+});
