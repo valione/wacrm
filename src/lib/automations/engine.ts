@@ -630,6 +630,16 @@ export function triggerMatches(automation: Automation, ctx: AutomationContext | 
     })
   }
 
+  // Match on the SPECIFIC tag that was added. Without this check every
+  // active tag_added automation would fire for every tag — the builder
+  // requires trigger_config.tag_id (validate.ts), so honour it here.
+  // A config missing the tag (pre-validation drafts force-activated via
+  // SQL, say) matches nothing rather than everything.
+  if (automation.trigger_type === 'tag_added') {
+    const cfg = automation.trigger_config as { tag_id?: string }
+    return Boolean(cfg?.tag_id) && cfg.tag_id === ctx?.tag_id
+  }
+
   // Match on the tapped button / list-row id (exact). Lets multi-step
   // menus be chained: automation A sends buttons, automation B fires on
   // the reply id and sends the next step.

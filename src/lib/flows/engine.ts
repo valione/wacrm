@@ -740,6 +740,32 @@ async function advanceFromNodeKey(
               { contact_id: run.contact_id!, tag_id: cfg.tag_id },
               { onConflict: "contact_id,tag_id" },
             );
+          // Chain into automations: this is the only server-side spot
+          // that knows a tag just landed, and 'tag_added' automations
+          // (e.g. create_deal on "lead qualificado") are dormant
+          // without a dispatcher. Fire-and-forget with the run's vars
+          // so step configs can interpolate {{vars.x}} captured by
+          // collect_input. Dynamic import keeps flows→automations a
+          // lazy edge (no cycle at module-load time).
+          void import("@/lib/automations/engine")
+            .then(({ runAutomationsForTrigger }) =>
+              runAutomationsForTrigger({
+                accountId: run.account_id,
+                triggerType: "tag_added",
+                contactId: run.contact_id,
+                context: {
+                  conversation_id: run.conversation_id ?? undefined,
+                  tag_id: cfg.tag_id,
+                  vars: run.vars,
+                },
+              }),
+            )
+            .catch((err) =>
+              logEvent(db, run.id, "error", node.node_key, {
+                reason: "tag_added_dispatch_failed",
+                detail: err instanceof Error ? err.message : String(err),
+              }),
+            );
         } else {
           await db
             .from("contact_tags")
