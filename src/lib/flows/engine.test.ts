@@ -6,6 +6,7 @@ import {
   isSuspending,
   isTerminal,
   evaluateConditionPredicate,
+  buildContactPatch,
 } from "./engine";
 
 describe("matchReplyId", () => {
@@ -144,12 +145,13 @@ describe("matchesKeywordTrigger", () => {
 });
 
 describe("node classification helpers", () => {
-  it("isAutoAdvancing covers start + send_message + send_media + condition + set_tag", () => {
+  it("isAutoAdvancing covers start + send_message + send_media + condition + set_tag + update_contact", () => {
     expect(isAutoAdvancing("start")).toBe(true);
     expect(isAutoAdvancing("send_message")).toBe(true);
     expect(isAutoAdvancing("send_media")).toBe(true);
     expect(isAutoAdvancing("condition")).toBe(true);
     expect(isAutoAdvancing("set_tag")).toBe(true);
+    expect(isAutoAdvancing("update_contact")).toBe(true);
     expect(isAutoAdvancing("send_buttons")).toBe(false);
     expect(isAutoAdvancing("send_list")).toBe(false);
     expect(isAutoAdvancing("collect_input")).toBe(false);
@@ -187,6 +189,7 @@ describe("node classification helpers", () => {
       "collect_input",
       "condition",
       "set_tag",
+      "update_contact",
       "handoff",
       "end",
     ];
@@ -295,5 +298,49 @@ describe("evaluateConditionPredicate", () => {
         configValue: "anything",
       }),
     ).toBe(false);
+  });
+});
+
+describe("buildContactPatch", () => {
+  const cfg = {
+    fields: [
+      { field: "name" as const, var_key: "nome" },
+      { field: "email" as const, var_key: "email" },
+      { field: "company" as const, var_key: "empresa" },
+    ],
+    next_node_key: "next",
+  };
+
+  it("maps present vars to their columns, trimming whitespace", () => {
+    const { patch, skipped } = buildContactPatch(cfg, {
+      nome: "  Maria Silva ",
+      email: "maria@acme.com",
+      empresa: "Acme",
+    });
+    expect(patch).toEqual({
+      name: "Maria Silva",
+      email: "maria@acme.com",
+      company: "Acme",
+    });
+    expect(skipped).toEqual([]);
+  });
+
+  it("skips missing, empty, and non-string vars instead of writing junk", () => {
+    const { patch, skipped } = buildContactPatch(cfg, {
+      nome: "Maria",
+      email: "   ",
+      empresa: 42,
+    });
+    expect(patch).toEqual({ name: "Maria" });
+    expect(skipped).toEqual(["email", "company"]);
+  });
+
+  it("handles a config with no fields at all", () => {
+    const { patch, skipped } = buildContactPatch(
+      { fields: [], next_node_key: "next" },
+      { nome: "Maria" },
+    );
+    expect(patch).toEqual({});
+    expect(skipped).toEqual([]);
   });
 });

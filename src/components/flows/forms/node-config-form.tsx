@@ -195,6 +195,17 @@ export function NodeConfigForm({
         />
       );
 
+    case "update_contact":
+      return (
+        <UpdateContactForm
+          cfg={cfg as UpdateContactCfg}
+          allNodes={allNodes}
+          currentKey={node.node_key}
+          onUpdateConfig={onUpdateConfig}
+          t={t}
+        />
+      );
+
     case "handoff":
       return (
         <TextRow
@@ -824,6 +835,120 @@ function SetTagForm({
             />
           )}
         </div>
+      </div>
+      <NextNodeRow
+        value={cfg.next_node_key ?? ""}
+        allNodes={allNodes}
+        currentKey={currentKey}
+        onChange={(v) => onUpdateConfig({ next_node_key: v })}
+        label={t("thenAdvanceTo")}
+      />
+    </>
+  );
+}
+
+// ============================================================
+// update_contact
+// ============================================================
+
+interface UpdateContactCfg {
+  fields?: Array<{ field?: "name" | "email" | "company"; var_key?: string }>;
+  next_node_key?: string;
+}
+
+const UPDATE_CONTACT_FIELDS = ["name", "email", "company"] as const;
+
+function UpdateContactForm({
+  cfg,
+  allNodes,
+  currentKey,
+  onUpdateConfig,
+  t,
+}: {
+  cfg: UpdateContactCfg;
+  allNodes: BuilderNode[];
+  currentKey: string;
+  onUpdateConfig: (patch: Record<string, unknown>) => void;
+  t: ReturnType<typeof useTranslations>;
+}) {
+  const mappings = cfg.fields ?? [];
+
+  const updateMapping = (
+    idx: number,
+    patch: Partial<{ field: string; var_key: string }>,
+  ) =>
+    onUpdateConfig({
+      fields: mappings.map((m, i) => (i === idx ? { ...m, ...patch } : m)),
+    });
+
+  const addMapping = () => {
+    // Suggest the first column not yet mapped — the validator rejects
+    // duplicates, so don't scaffold one.
+    const used = new Set<string>(
+      mappings.map((m) => m.field).filter((f): f is "name" | "email" | "company" => !!f),
+    );
+    const free: string =
+      UPDATE_CONTACT_FIELDS.find((f) => !used.has(f)) ?? "name";
+    onUpdateConfig({ fields: [...mappings, { field: free, var_key: "" }] });
+  };
+
+  const removeMapping = (idx: number) =>
+    onUpdateConfig({ fields: mappings.filter((_, i) => i !== idx) });
+
+  return (
+    <>
+      <p className="text-xs text-muted-foreground">{t("updateContactHelp")}</p>
+      <div className="flex flex-col gap-2">
+        {mappings.map((m, idx) => (
+          <div key={idx} className="flex items-center gap-2">
+            <Select
+              value={m.field ?? "name"}
+              onValueChange={(v) => {
+                if (v) updateMapping(idx, { field: v });
+              }}
+            >
+              <SelectTrigger className="bg-muted w-32 shrink-0">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {UPDATE_CONTACT_FIELDS.map((f) => (
+                  <SelectItem key={f} value={f}>
+                    {f}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <span className="text-xs text-muted-foreground">←</span>
+            <Input
+              value={m.var_key ?? ""}
+              onChange={(e) => updateMapping(idx, { var_key: e.target.value })}
+              placeholder={t("varKeyPlaceholder")}
+              className="bg-muted font-mono text-xs"
+            />
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              onClick={() => removeMapping(idx)}
+              aria-label={t("removeMapping")}
+              className="shrink-0 text-muted-foreground hover:text-foreground"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        ))}
+        {mappings.length < UPDATE_CONTACT_FIELDS.length && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={addMapping}
+            className="mt-1 self-start"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            {t("addMapping")}
+          </Button>
+        )}
       </div>
       <NextNodeRow
         value={cfg.next_node_key ?? ""}

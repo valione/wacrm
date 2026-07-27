@@ -701,6 +701,75 @@ function validateNode(
       break;
     }
 
+    case "update_contact": {
+      const cfg = node.config as {
+        fields?: Array<{ field?: string; var_key?: string }>;
+        next_node_key?: string;
+      };
+      const allowed = ["name", "email", "company"];
+      if (!cfg.fields || cfg.fields.length === 0) {
+        issues.push({
+          severity: "error",
+          scope: "node",
+          node_key: node.node_key,
+          field: "fields",
+          message: "Update-contact needs at least one field mapping.",
+        });
+      } else {
+        const seen = new Set<string>();
+        for (const [i, m] of cfg.fields.entries()) {
+          if (!m.field || !allowed.includes(m.field)) {
+            issues.push({
+              severity: "error",
+              scope: "node",
+              node_key: node.node_key,
+              field: `fields[${i}].field`,
+              message: `Update-contact field must be one of: ${allowed.join(", ")}.`,
+            });
+          } else if (seen.has(m.field)) {
+            // Two mappings to the same column — the later one would
+            // silently win; force the author to pick one.
+            issues.push({
+              severity: "error",
+              scope: "node",
+              node_key: node.node_key,
+              field: `fields[${i}].field`,
+              message: `Update-contact maps "${m.field}" more than once.`,
+            });
+          } else {
+            seen.add(m.field);
+          }
+          if (!m.var_key?.trim()) {
+            issues.push({
+              severity: "error",
+              scope: "node",
+              node_key: node.node_key,
+              field: `fields[${i}].var_key`,
+              message: "Update-contact mapping needs the variable name to read from.",
+            });
+          }
+        }
+      }
+      if (!cfg.next_node_key) {
+        issues.push({
+          severity: "error",
+          scope: "node",
+          node_key: node.node_key,
+          field: "next_node_key",
+          message: "Update-contact must point to a next node.",
+        });
+      } else if (!knownKeys.has(cfg.next_node_key)) {
+        issues.push({
+          severity: "error",
+          scope: "node",
+          node_key: node.node_key,
+          field: "next_node_key",
+          message: `Update-contact points to non-existent node "${cfg.next_node_key}".`,
+        });
+      }
+      break;
+    }
+
     case "handoff":
     case "end":
       // Terminal nodes have no outgoing edges; nothing to validate
@@ -751,7 +820,8 @@ function outgoingEdges(node: NodeInput): string[] {
     case "send_message":
     case "send_media":
     case "collect_input":
-    case "set_tag": {
+    case "set_tag":
+    case "update_contact": {
       const cfg = node.config as { next_node_key?: string };
       return cfg.next_node_key ? [cfg.next_node_key] : [];
     }

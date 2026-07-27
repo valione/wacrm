@@ -55,6 +55,7 @@ import {
   type SendMessageNodeConfig,
   type SetTagNodeConfig,
   type StartNodeConfig,
+  type UpdateContactNodeConfig,
   type KeywordTriggerConfig,
 } from "./types";
 
@@ -109,6 +110,30 @@ export function matchesKeywordTrigger(
   return false;
 }
 
+/**
+ * Build the contacts UPDATE payload for an `update_contact` node from
+ * the run's captured vars. Pure — extracted so engine.test.ts can
+ * exercise the skip/trim rules without a DB.
+ *
+ * A field is written only when its var exists and trims non-empty;
+ * everything else lands in `skipped` (logged on the run event so a
+ * half-filled contact is diagnosable, not silent).
+ */
+export function buildContactPatch(
+  cfg: UpdateContactNodeConfig,
+  vars: Record<string, unknown>,
+): { patch: Record<string, string>; skipped: string[] } {
+  const patch: Record<string, string> = {};
+  const skipped: string[] = [];
+  for (const mapping of cfg.fields ?? []) {
+    const raw = vars[mapping.var_key];
+    const value = typeof raw === "string" ? raw.trim() : "";
+    if (value) patch[mapping.field] = value;
+    else skipped.push(mapping.field);
+  }
+  return { patch, skipped };
+}
+
 /** Nodes that advance to a next_node_key without waiting for input. */
 export function isAutoAdvancing(node_type: string): boolean {
   return (
@@ -116,7 +141,8 @@ export function isAutoAdvancing(node_type: string): boolean {
     node_type === "send_message" ||
     node_type === "send_media" ||
     node_type === "condition" ||
-    node_type === "set_tag"
+    node_type === "set_tag" ||
+    node_type === "update_contact"
   );
 }
 
@@ -729,6 +755,30 @@ async function advanceFromNodeKey(
           detail: err instanceof Error ? err.message : String(err),
         });
       }
+      currentKey = cfg.next_node_key;
+      continue;
+    }
+    if (node.node_type === "update_contact") {
+      const cfg = node.config as unknown as UpdateContactNodeConfig;
+      const { patch, skipped } = buildContactPatch(cfg, run.vars);
+      if (Object.keys(patch).length > 0) {
+        const { error } = await db
+          .from("contacts")
+          .update({ ...patch, updated_at: new Date().toISOString() })
+          .eq("id", run.contact_id!);
+        if (error) {
+          // Non-fatal — same policy as set_tag: an internal write
+          // failure must not strand the customer mid-conversation.
+          await logEvent(db, run.id, "error", node.node_key, {
+            reason: "update_contact_failed",
+            detail: error.message,
+          });
+        }
+      }
+      await logEvent(db, run.id, "node_entered", node.node_key, {
+        updated_fields: Object.keys(patch),
+        skipped_fields: skipped,
+      });
       currentKey = cfg.next_node_key;
       continue;
     }
