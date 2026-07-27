@@ -9,6 +9,15 @@ Convenção: **minor** (1.1 → 1.2) a cada deploy com ajustes e novidades;
 aparece no rodapé do app; cada versão publicada ganha uma tag git
 (`v1.0.0`, `v1.1.0`, ...).
 
+## v1.4 — 2026-07-27
+
+- O status salvo da conexão WhatsApp agora se **auto-corrige**: a tela
+  de Configurações já consultava o provedor ao vivo; agora ela grava o
+  que descobre. O banner "não conectado" do Inbox passa a acender quando
+  o número cai (ex.: bloqueio pelo WhatsApp) e a apagar sozinho depois
+  de reconectar — sem SQL manual. Também preenche o telefone conectado
+  quando o fluxo do QR foi interrompido antes de gravá-lo.
+
 ## v1.3 — 2026-07-27
 
 - Iniciar conversa com **mensagem livre** nos provedores por QR Code

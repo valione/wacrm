@@ -16,6 +16,7 @@ import {
   deleteInstance,
   isGoneError,
 } from '@/lib/whatsapp/uazapi-api'
+import { resolveStatusPatch } from '@/lib/whatsapp/status-sync'
 
 /**
  * Resolve the caller's account_id from their profile. Inlined here
@@ -54,6 +55,41 @@ function supabaseAdmin() {
     )
   }
   return _adminClient
+}
+
+/**
+ * Write back what the provider just told us, when it diverges from the
+ * stored row (see resolveStatusPatch for the rules). `provider_phone`
+ * rides along because the same interrupted QR-polling that leaves
+ * `status` stuck also leaves the phone null.
+ *
+ * Admin client: viewers can GET this route but RLS (rightly) doesn't
+ * let them write whatsapp_config — and this write records provider
+ * truth, not a user action. Best-effort: a failed sync only means the
+ * banner stays stale until the next visit.
+ */
+async function syncStoredStatus(args: {
+  accountId: string
+  provider: 'waha' | 'uazapi'
+  storedStatus: string | null
+  storedPhone: string | null
+  liveConnected: boolean
+  livePhone?: string | null
+}): Promise<void> {
+  const statusPatch = resolveStatusPatch(args.storedStatus, args.liveConnected)
+  const patch: Record<string, string> = {}
+  if (statusPatch) patch.status = statusPatch
+  if (!args.storedPhone && args.livePhone) patch.provider_phone = args.livePhone
+  if (Object.keys(patch).length === 0) return
+
+  const { error } = await supabaseAdmin()
+    .from('whatsapp_config')
+    .update(patch)
+    .eq('account_id', args.accountId)
+    .eq('provider', args.provider)
+  if (error) {
+    console.error('[whatsapp/config GET] sync de status falhou:', error)
+  }
 }
 
 /**
@@ -138,6 +174,13 @@ export async function GET() {
     if (config.provider === 'waha') {
       try {
         const info = await getSession({ session: config.provider_session! })
+        await syncStoredStatus({
+          accountId,
+          provider: 'waha',
+          storedStatus: config.status,
+          storedPhone: config.provider_phone,
+          liveConnected: info.status === 'WORKING',
+        })
         return NextResponse.json({
           connected: info.status === 'WORKING',
           provider: 'waha',
@@ -194,6 +237,14 @@ export async function GET() {
       try {
         const info = await getInstanceStatus({ token: uazapiToken })
         const connected = info.status === 'connected' && info.loggedIn
+        await syncStoredStatus({
+          accountId,
+          provider: 'uazapi',
+          storedStatus: config.status,
+          storedPhone: config.provider_phone,
+          liveConnected: Boolean(connected),
+          livePhone: info.phone,
+        })
         return NextResponse.json({
           connected,
           provider: 'uazapi',
@@ -201,7 +252,7 @@ export async function GET() {
           waha_available: wahaEnabled(),
           uazapi_available: true,
           uazapi_status: info.status,
-          phone: config.provider_phone,
+          phone: config.provider_phone ?? info.phone,
           ...(!connected && {
             reason: 'uazapi_session_down',
             message: 'A sessão Uazapi não está ativa — reconecte pelo QR Code.',
@@ -211,7 +262,17 @@ export async function GET() {
         // 401/404 significam instância morta (expirada/apagada — o demo
         // server apaga em 1h), não servidor fora do ar. Mesma distinção
         // feita na rota de reconexão (uazapi/instance POST).
+        // Sincroniza o status salvo só neste caso: instância morta é um
+        // veredito do provedor. Servidor INACESSÍVEL (ramo de baixo) não
+        // é — um soluço de rede não pode reescrever o estado salvo.
         if (isGoneError(err)) {
+          await syncStoredStatus({
+            accountId,
+            provider: 'uazapi',
+            storedStatus: config.status,
+            storedPhone: config.provider_phone,
+            liveConnected: false,
+          })
           return NextResponse.json({
             connected: false,
             provider: 'uazapi',
