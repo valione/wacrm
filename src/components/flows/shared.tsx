@@ -26,6 +26,7 @@ import {
   Paperclip,
   PlayCircle,
   Tag,
+  UserPen,
   UserPlus,
   Workflow,
 } from 'lucide-react';
@@ -49,6 +50,7 @@ export type NodeType =
   | 'collect_input'
   | 'condition'
   | 'set_tag'
+  | 'update_contact'
   | 'handoff'
   | 'end';
 
@@ -152,6 +154,13 @@ export const NODE_META: Record<
     blurb: 'Adds or removes a contact tag',
     category: 'logic',
   },
+  update_contact: {
+    label: 'Update contact',
+    icon: UserPen,
+    color: 'text-lime-400',
+    blurb: 'Saves captured answers to the contact record',
+    category: 'logic',
+  },
   handoff: {
     label: 'Handoff to agent',
     icon: UserPlus,
@@ -205,6 +214,7 @@ const NODE_HUE: Record<NodeType, { l: number; c: number; h: number }> = {
   collect_input: { l: 0.65, c: 0.1, h: 185 }, // teal — capture
   condition: { l: 0.72, c: 0.15, h: 65 }, // amber — a fork in the road
   set_tag: { l: 0.65, c: 0.15, h: 350 }, // pink
+  update_contact: { l: 0.68, c: 0.13, h: 130 }, // lime — writes to the record
   handoff: { l: 0.65, c: 0.17, h: 16 }, // rose — hands off
   end: { l: 0.55, c: 0.01, h: 260 }, // neutral grey — terminal
 };
@@ -419,6 +429,20 @@ export function summarizeNode(
       return tagId
         ? t ? t('tagPicked', { mode, tag: tagId.slice(0, 8) }) : `${mode} tag ${tagId.slice(0, 8)}…`
         : t ? t('tagNone', { mode }) : `${mode} tag (none picked)`;
+    }
+    case 'update_contact': {
+      const fields = Array.isArray(cfg.fields) ? cfg.fields : [];
+      const parts = fields
+        .filter(
+          (m): m is { field: string; var_key: string } =>
+            !!m && typeof m === 'object' && typeof (m as { field?: unknown }).field === 'string',
+        )
+        .map((m) => `${m.field} ← {{${m.var_key || '?'}}}`);
+      return parts.length > 0
+        ? truncate(parts.join(' · '))
+        : t
+          ? t('updateContactNone')
+          : 'No fields mapped';
     }
     case 'handoff': {
       const note = typeof cfg.note === 'string' ? cfg.note : '';

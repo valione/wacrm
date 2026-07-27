@@ -1223,7 +1223,10 @@
         "filenamePlaceholder": "invoice.pdf",
         "advanceAfterSending": "After sending, advance to",
         "pickNextNode": "Pick a next node…",
-        "none": "— None —"
+        "none": "— None —",
+        "updateContactHelp": "Copies variables captured with \"Collect input\" into the contact record. Overwrites the field’s current value.",
+        "addMapping": "Add field",
+        "removeMapping": "Remove mapping"
       },
       "categories": {
         "messaging": "Messaging",
@@ -1270,6 +1273,10 @@
         "end": {
           "label": "End",
           "blurb": "Ends the flow"
+        },
+        "update_contact": {
+          "label": "Update contact",
+          "blurb": "Saves captured answers to the contact record"
         }
       }
     },
@@ -1301,7 +1308,8 @@
       "modeAdd": "Add",
       "modeRemove": "Remove",
       "tagPicked": "{mode} tag {tag}…",
-      "tagNone": "{mode} tag (none picked)"
+      "tagNone": "{mode} tag (none picked)",
+      "updateContactNone": "No fields mapped"
     }
   },
   "Settings": {

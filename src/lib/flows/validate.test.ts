@@ -547,3 +547,104 @@ describe("reachableFromEntry", () => {
     expect(set).toEqual(new Set(["a", "b"]));
   });
 });
+
+describe("validateFlowForActivation — update_contact", () => {
+  const flowWithUpdate = {
+    ...validFlow,
+    entry_node_id: "start",
+  };
+  const base = [
+    { node_key: "start", node_type: "start", config: { next_node_key: "up" } },
+    {
+      node_key: "up",
+      node_type: "update_contact",
+      config: {
+        fields: [
+          { field: "name", var_key: "nome" },
+          { field: "email", var_key: "email" },
+        ],
+        next_node_key: "ho",
+      },
+    },
+    { node_key: "ho", node_type: "handoff", config: {} },
+  ];
+
+  it("passes on a well-formed node", () => {
+    expect(validateFlowForActivation(flowWithUpdate, base)).toEqual([]);
+  });
+
+  it("flags an empty fields list", () => {
+    const nodes = base.map((n) =>
+      n.node_key === "up"
+        ? { ...n, config: { fields: [], next_node_key: "ho" } }
+        : n,
+    );
+    expect(validateFlowForActivation(flowWithUpdate, nodes)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ node_key: "up", field: "fields" }),
+      ]),
+    );
+  });
+
+  it("flags an unknown contact column", () => {
+    const nodes = base.map((n) =>
+      n.node_key === "up"
+        ? {
+            ...n,
+            config: {
+              fields: [{ field: "phone", var_key: "tel" }],
+              next_node_key: "ho",
+            },
+          }
+        : n,
+    );
+    expect(validateFlowForActivation(flowWithUpdate, nodes)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ node_key: "up", field: "fields[0].field" }),
+      ]),
+    );
+  });
+
+  it("flags the same column mapped twice", () => {
+    const nodes = base.map((n) =>
+      n.node_key === "up"
+        ? {
+            ...n,
+            config: {
+              fields: [
+                { field: "name", var_key: "a" },
+                { field: "name", var_key: "b" },
+              ],
+              next_node_key: "ho",
+            },
+          }
+        : n,
+    );
+    expect(validateFlowForActivation(flowWithUpdate, nodes)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ node_key: "up", field: "fields[1].field" }),
+      ]),
+    );
+  });
+
+  it("flags a mapping without var_key and a missing next node", () => {
+    const nodes = base.map((n) =>
+      n.node_key === "up"
+        ? {
+            ...n,
+            config: {
+              fields: [{ field: "name", var_key: "  " }],
+              next_node_key: "ghost",
+            },
+          }
+        : n,
+    );
+    const issues = validateFlowForActivation(flowWithUpdate, nodes);
+    expect(issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ node_key: "up", field: "fields[0].var_key" }),
+        expect.objectContaining({ node_key: "up", field: "next_node_key" }),
+      ]),
+    );
+  });
+});

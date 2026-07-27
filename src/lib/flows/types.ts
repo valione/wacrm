@@ -173,6 +173,32 @@ export interface SetTagNodeConfig {
   next_node_key: string;
 }
 
+/** Contact columns `update_contact` may write. `phone` is deliberately
+ *  excluded: it's the contact's identity (dedup unique index from
+ *  migration 022) and is already known — rewriting it from free text
+ *  the customer typed could detach the conversation from its contact. */
+export type UpdateContactField = "name" | "email" | "company";
+
+/**
+ * Copies captured `flow_runs.vars` values into the contact row, then
+ * auto-advances (same effect-node class as `set_tag`: no customer-side
+ * send, no suspend). This is what turns a qualification flow's answers
+ * into a filled-in contact record instead of vars that die with the
+ * run.
+ *
+ * Overwrites existing values on purpose — the customer just stated the
+ * data, which beats the WhatsApp pushName that seeded `name`. Missing
+ * or empty vars skip their field (logged on the run event, non-fatal).
+ */
+export interface UpdateContactNodeConfig {
+  fields: Array<{
+    field: UpdateContactField;
+    /** Key in flow_runs.vars — same key an upstream collect_input used. */
+    var_key: string;
+  }>;
+  next_node_key: string;
+}
+
 // Terminal nodes carry no config — they just stop the run.
 export type EndNodeConfig = Record<string, never>;
 
@@ -193,6 +219,7 @@ export type FlowNodeConfig =
   | { node_type: "collect_input"; config: CollectInputNodeConfig }
   | { node_type: "condition"; config: ConditionNodeConfig }
   | { node_type: "set_tag"; config: SetTagNodeConfig }
+  | { node_type: "update_contact"; config: UpdateContactNodeConfig }
   | { node_type: "handoff"; config: HandoffNodeConfig }
   | { node_type: "end"; config: EndNodeConfig };
 

@@ -9,6 +9,15 @@ Convenção: **minor** (1.1 → 1.2) a cada deploy com ajustes e novidades;
 aparece no rodapé do app; cada versão publicada ganha uma tag git
 (`v1.0.0`, `v1.1.0`, ...).
 
+## v1.5 — 2026-07-27
+
+- Novo bloco **"Atualizar contato"** nos Fluxos: grava as respostas
+  capturadas (nome, e-mail, empresa) direto no cadastro do contato.
+  É a peça que faltava para o funil de qualificação automático —
+  boas-vindas → perguntas → cadastro completo → tag → card no
+  pipeline via automação "tag adicionada" + "criar negócio".
+  (Requer a migração 041 no banco de cada instalação.)
+
 ## v1.4 — 2026-07-27
 
 - O status salvo da conexão WhatsApp agora se **auto-corrige**: a tela

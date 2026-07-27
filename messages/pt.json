@@ -1223,7 +1223,10 @@
         "filenamePlaceholder": "fatura.pdf",
         "advanceAfterSending": "Após enviar, avançar para",
         "pickNextNode": "Escolha um próximo nó…",
-        "none": "— Nenhum —"
+        "none": "— Nenhum —",
+        "updateContactHelp": "Copia variáveis capturadas com \"Coletar resposta\" para o cadastro do contato. Sobrescreve o valor atual do campo.",
+        "addMapping": "Adicionar campo",
+        "removeMapping": "Remover mapeamento"
       },
       "categories": {
         "messaging": "Mensagens",
@@ -1270,6 +1273,10 @@
         "end": {
           "label": "Fim",
           "blurb": "Encerra o fluxo"
+        },
+        "update_contact": {
+          "label": "Atualizar contato",
+          "blurb": "Grava respostas capturadas no cadastro do contato"
         }
       }
     },
@@ -1301,7 +1308,8 @@
       "modeAdd": "Adicionar",
       "modeRemove": "Remover",
       "tagPicked": "{mode} tag {tag}…",
-      "tagNone": "{mode} tag (nenhuma escolhida)"
+      "tagNone": "{mode} tag (nenhuma escolhida)",
+      "updateContactNone": "Nenhum campo mapeado"
     }
   },
   "Settings": {
