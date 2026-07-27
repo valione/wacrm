@@ -10,6 +10,9 @@ import {
   TemplatePicker,
   type TemplateSendValues,
 } from '@/components/inbox/template-picker';
+import { NewConversationDialog } from '@/components/inbox/new-conversation-dialog';
+import { useProviderCapabilities } from '@/lib/whatsapp/use-provider-capabilities';
+import { canStartConversation } from '@/lib/whatsapp/can-start-conversation';
 import {
   Sheet,
   SheetContent,
@@ -38,6 +41,7 @@ import {
   X,
   DollarSign,
   LayoutTemplate,
+  MessageSquare,
 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 
@@ -67,6 +71,14 @@ export function ContactDetailView({
   // find-or-creates the conversation, so no inbound message is required.
   const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
   const [sendingTemplate, setSendingTemplate] = useState(false);
+
+  // Free-text send — same "initiate a conversation" job as the template
+  // above, but for QR providers (Uazapi/WAHA), which have no 24h window
+  // and so don't need an approved template. On Meta the capability check
+  // hides it and the template stays the only way in.
+  const [messageDialogOpen, setMessageDialogOpen] = useState(false);
+  const capabilities = useProviderCapabilities();
+  const canStart = canStartConversation(capabilities);
 
   // Details tab
   const [editName, setEditName] = useState('');
@@ -438,12 +450,27 @@ export function ContactDetailView({
                   </div>
                 </div>
               </div>
-              <div className="mt-3">
+              <div className="mt-3 flex flex-wrap gap-2">
+                {canStart && (
+                  <Button
+                    size="sm"
+                    onClick={() => setMessageDialogOpen(true)}
+                    className="bg-primary text-primary-foreground hover:bg-primary/90"
+                  >
+                    <MessageSquare className="size-4" />
+                    {t('sendMessageBtn')}
+                  </Button>
+                )}
                 <Button
                   size="sm"
+                  variant={canStart ? 'outline' : 'default'}
                   onClick={() => setTemplatePickerOpen(true)}
                   disabled={sendingTemplate}
-                  className="bg-primary text-primary-foreground hover:bg-primary/90"
+                  className={
+                    canStart
+                      ? 'border-border text-foreground hover:bg-muted'
+                      : 'bg-primary text-primary-foreground hover:bg-primary/90'
+                  }
                 >
                   {sendingTemplate ? (
                     <Loader2 className="size-4 animate-spin" />
@@ -760,6 +787,17 @@ export function ContactDetailView({
       onOpenChange={setTemplatePickerOpen}
       onSelect={handleSendTemplate}
     />
+    {contact && (
+      <NewConversationDialog
+        open={messageDialogOpen}
+        onOpenChange={setMessageDialogOpen}
+        fixedContact={{
+          id: contact.id,
+          name: contact.name,
+          phone: contact.phone,
+        }}
+      />
+    )}
     </>
   );
 }

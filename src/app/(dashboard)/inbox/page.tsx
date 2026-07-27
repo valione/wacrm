@@ -13,6 +13,9 @@ import { useRealtime } from "@/hooks/use-realtime";
 import { ConversationList } from "@/components/inbox/conversation-list";
 import { MessageThread } from "@/components/inbox/message-thread";
 import { ContactSidebar } from "@/components/inbox/contact-sidebar";
+import { NewConversationDialog } from "@/components/inbox/new-conversation-dialog";
+import { useProviderCapabilities } from "@/lib/whatsapp/use-provider-capabilities";
+import { canStartConversation } from "@/lib/whatsapp/can-start-conversation";
 import { toast } from "sonner";
 import { WifiOff } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -48,6 +51,15 @@ export default function InboxPage() {
    * once on conversationId-change as usual.
    */
   const [resyncToken, setResyncToken] = useState(0);
+
+  /**
+   * Business-initiated free text. Only providers without Meta's 24h
+   * window can do it, so the dialog (and the button that opens it) are
+   * gated on the active provider's capabilities.
+   */
+  const capabilities = useProviderCapabilities();
+  const canStart = canStartConversation(capabilities);
+  const [newConversationOpen, setNewConversationOpen] = useState(false);
 
   /**
    * Whether the desktop contact sidebar (tags / deals / notes) is shown.
@@ -491,6 +503,31 @@ export default function InboxPage() {
   }, [router]);
 
 
+  /**
+   * A conversation was just started from the dialog. The send route
+   * find-or-created it but doesn't return its id, so we resolve it from
+   * the contact and hand off to the existing deep-link path: bump the
+   * resync token (the new thread isn't in the list yet) and put `?c=`
+   * in the URL, which the auto-select block picks up once the refetched
+   * list arrives.
+   */
+  const handleConversationStarted = useCallback(
+    async (contactId: string) => {
+      const supabase = createClient();
+      const { data } = await supabase
+        .from("conversations")
+        .select("id")
+        .eq("contact_id", contactId)
+        .maybeSingle();
+      setResyncToken((prev) => prev + 1);
+      if (data?.id) {
+        autoSelectedForDeepLinkRef.current = null;
+        router.replace(`/inbox?c=${data.id}`, { scroll: false });
+      }
+    },
+    [router]
+  );
+
   const handleMessagesLoaded = useCallback((loaded: Message[]) => {
     setMessages(loaded);
   }, []);
@@ -579,6 +616,9 @@ export default function InboxPage() {
             conversations={conversations}
             onConversationsLoaded={handleConversationsLoaded}
             resyncToken={resyncToken}
+            onNewConversation={
+              canStart ? () => setNewConversationOpen(true) : undefined
+            }
           />
         </div>
 
@@ -625,6 +665,12 @@ export default function InboxPage() {
           </div>
         )}
       </div>
+
+      <NewConversationDialog
+        open={newConversationOpen}
+        onOpenChange={setNewConversationOpen}
+        onSent={handleConversationStarted}
+      />
     </div>
   );
 }
