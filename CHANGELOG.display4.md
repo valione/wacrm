@@ -9,7 +9,16 @@ Convenção: **minor** (1.1 → 1.2) a cada deploy com ajustes e novidades;
 aparece no rodapé do app; cada versão publicada ganha uma tag git
 (`v1.0.0`, `v1.1.0`, ...).
 
-## v1.2 — não publicada
+## v1.3 — 2026-07-27
+
+- Iniciar conversa com **mensagem livre** nos provedores por QR Code
+  (Uazapi/WAHA), que não têm a janela de 24h da Meta: botão "+" no topo
+  da lista do Inbox (escolhe um contato ou digita um número novo, que
+  vira contato automaticamente) e "Enviar mensagem" na ficha do contato.
+  Em contas Meta os botões não aparecem — lá a primeira mensagem
+  continua tendo de ser um modelo aprovado.
+
+## v1.2 — 2026-07-12
 
 - Rotas de cron (transmissões, automações, fluxos) aceitam o segredo
   também pela URL (`?secret=`), viabilizando pingers gratuitos que não

@@ -143,7 +143,8 @@
       "clearAll": "Clear all",
       "noConversations": "No conversations found",
       "noMessagesYet": "No messages yet",
-      "unknown": "Unknown"
+      "unknown": "Unknown",
+      "newConversation": "New conversation"
     },
     "messageThread": {
       "backToConversations": "Back to conversations",
@@ -277,6 +278,35 @@
       "resumed": "AI resumed.",
       "updateError": "Couldn’t update the AI assistant.",
       "networkError": "Couldn’t reach the server."
+    },
+    "newConversation": {
+      "title": "New conversation",
+      "description": "Pick a contact or enter a new number, then write the first message.",
+      "titleFixed": "Send message",
+      "descriptionFixed": "Message to {name}.",
+      "modeExisting": "Existing contact",
+      "modeNew": "New number",
+      "searchPlaceholder": "Search by name or phone...",
+      "searching": "Searching...",
+      "noResults": "No contacts found.",
+      "unnamed": "Unnamed",
+      "clearRecipient": "Change recipient",
+      "phoneLabel": "Phone (with country and area code)",
+      "phoneHint": "Digits only. e.g. 5511999998888",
+      "nameLabel": "Name (optional)",
+      "namePlaceholder": "How to save this contact",
+      "messageLabel": "Message",
+      "messagePlaceholder": "Write the first message...",
+      "coldWarning": "Cold outreach at volume can get the number restricted by WhatsApp.",
+      "cancel": "Cancel",
+      "send": "Send",
+      "toastSent": "Message sent.",
+      "errorNoRecipient": "Pick a contact.",
+      "errorInvalidPhone": "Enter a valid phone with country and area code.",
+      "errorNoAccount": "Your account is still loading. Try again.",
+      "errorContactCreate": "Could not create the contact.",
+      "errorEmptyMessage": "Write a message.",
+      "errorSend": "Send failed: {reason}"
     }
   },
   "Contacts": {
@@ -414,7 +444,8 @@
       "toastCustomFieldsSaved": "Custom fields saved",
       "toastCustomFieldsFailed": "Failed to save custom fields",
       "toastTemplateSent": "Template \"{name}\" sent",
-      "toastTemplateFailed": "Failed to send template: {reason}"
+      "toastTemplateFailed": "Failed to send template: {reason}",
+      "sendMessageBtn": "Send message"
     },
     "importModal": {
       "title": "Import Contacts",

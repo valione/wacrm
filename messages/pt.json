@@ -143,7 +143,8 @@
       "clearAll": "Limpar tudo",
       "noConversations": "Nenhuma conversa encontrada",
       "noMessagesYet": "Nenhuma mensagem ainda",
-      "unknown": "Desconhecido"
+      "unknown": "Desconhecido",
+      "newConversation": "Nova conversa"
     },
     "messageThread": {
       "backToConversations": "Voltar para as conversas",
@@ -277,6 +278,35 @@
       "resumed": "IA retomada.",
       "updateError": "Não foi possível atualizar o assistente de IA.",
       "networkError": "Não foi possível conectar ao servidor."
+    },
+    "newConversation": {
+      "title": "Nova conversa",
+      "description": "Escolha um contato ou informe um número novo e escreva a primeira mensagem.",
+      "titleFixed": "Enviar mensagem",
+      "descriptionFixed": "Mensagem para {name}.",
+      "modeExisting": "Contato existente",
+      "modeNew": "Número novo",
+      "searchPlaceholder": "Buscar por nome ou telefone...",
+      "searching": "Buscando...",
+      "noResults": "Nenhum contato encontrado.",
+      "unnamed": "Sem nome",
+      "clearRecipient": "Trocar destinatário",
+      "phoneLabel": "Telefone (com DDI e DDD)",
+      "phoneHint": "Somente números. Ex.: 5511999998888",
+      "nameLabel": "Nome (opcional)",
+      "namePlaceholder": "Como salvar este contato",
+      "messageLabel": "Mensagem",
+      "messagePlaceholder": "Escreva a primeira mensagem...",
+      "coldWarning": "Mensagens frias em volume podem gerar restrição do número no WhatsApp.",
+      "cancel": "Cancelar",
+      "send": "Enviar",
+      "toastSent": "Mensagem enviada.",
+      "errorNoRecipient": "Escolha um contato.",
+      "errorInvalidPhone": "Informe um telefone válido com DDI e DDD.",
+      "errorNoAccount": "Sua conta ainda está carregando. Tente novamente.",
+      "errorContactCreate": "Não foi possível criar o contato.",
+      "errorEmptyMessage": "Escreva uma mensagem.",
+      "errorSend": "Falha ao enviar: {reason}"
     }
   },
   "Contacts": {
@@ -414,7 +444,8 @@
       "toastCustomFieldsSaved": "Campos personalizados salvos",
       "toastCustomFieldsFailed": "Falha ao salvar campos personalizados",
       "toastTemplateSent": "Modelo \"{name}\" enviado",
-      "toastTemplateFailed": "Falha ao enviar modelo: {reason}"
+      "toastTemplateFailed": "Falha ao enviar modelo: {reason}",
+      "sendMessageBtn": "Enviar mensagem"
     },
     "importModal": {
       "title": "Importar Contatos",
