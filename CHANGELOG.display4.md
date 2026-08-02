@@ -9,6 +9,37 @@ Convenção: **minor** (1.1 → 1.2) a cada deploy com ajustes e novidades;
 aparece no rodapé do app; cada versão publicada ganha uma tag git
 (`v1.0.0`, `v1.1.0`, ...).
 
+## v1.7 — 2026-08-01
+
+### Assinatura do atendente nas mensagens
+
+O WhatsApp identifica toda mensagem enviada pelo **número da empresa** —
+não existe campo de remetente por pessoa. Com mais de um atendente no
+Inbox, o cliente via uma voz só. Agora cada atendente pode ativar a
+assinatura no próprio perfil (Configurações → Seu perfil → "Assinar suas
+mensagens") e o primeiro nome dele passa a abrir a mensagem:
+
+```
+*Marcos*
+Bom dia! Sobre o orçamento que você pediu…
+```
+
+Detalhes:
+
+- **Por atendente, não por conta** — cada um decide, e a opção nasce
+  **desligada** (nenhuma instalação muda de comportamento sozinha).
+- O nome vem do "Nome de exibição" do perfil; trocar lá muda a
+  assinatura, sem cadastro extra.
+- **Só o que um humano digita no painel é assinado.** Fluxos,
+  automações, transmissões e a API pública (`/api/v1/messages`) seguem
+  sem assinatura — não há autor a atribuir.
+- Legenda de mídia é assinada; mídia **sem** legenda não ganha legenda
+  só com o nome. Templates e mensagens interativas nunca são assinados
+  (o corpo é aprovado pela Meta).
+- A assinatura entra no texto enviado **e** no histórico, então a
+  conversa no Inbox mostra exatamente o que o cliente recebeu.
+- Migração `042_agent_signature.sql` (coluna `profiles.signature_enabled`).
+
 ## v1.6 — 2026-07-27
 
 - Automações com gatilho **"Tag adicionada"** agora funcionam de fato:

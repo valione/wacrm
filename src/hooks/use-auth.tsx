@@ -35,6 +35,12 @@ interface Profile {
   beta_features: string[];
   account_id: string | null;
   account_role: AccountRole | null;
+  /**
+   * Prefix this agent's first name to messages they send from the
+   * dashboard (migration 042). `NOT NULL DEFAULT FALSE` in the DB;
+   * narrowed defensively for deployments that haven't migrated yet.
+   */
+  signature_enabled: boolean;
 }
 
 interface AccountSummary {
@@ -138,7 +144,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { data, error } = await supabase
         .from("profiles")
         .select(
-          "id, full_name, email, avatar_url, role, beta_features, account_id, account_role",
+          "id, full_name, email, avatar_url, role, beta_features, account_id, account_role, signature_enabled",
         )
         .eq("user_id", userId)
         .maybeSingle();
@@ -212,6 +218,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           beta_features: data.beta_features ?? [],
           account_id: data.account_id ?? null,
           account_role: accountRole,
+          signature_enabled: data.signature_enabled === true,
         });
         setAccount(accountRow);
       } else {

@@ -10,6 +10,7 @@ import {
   validateSendMessageParams,
   SendMessageError,
 } from '@/lib/whatsapp/send-message'
+import { signOutboundText } from '@/lib/whatsapp/signature'
 
 // The dashboard's outbound-send endpoint. It owns auth, per-user rate
 // limiting, and the two ways the UI targets a thread — an existing
@@ -47,9 +48,14 @@ export async function POST(request: Request) {
     // (conversation, whatsapp_config, message_templates) is account-
     // scoped post-multi-user, so the previous `user_id` filters
     // returned nothing for teammates who didn't author the row.
+    // `full_name` + `signature_enabled` ride along for the agent
+    // signature (migration 042) — signing happens here, in the
+    // dashboard route, so flows/automations/broadcasts and the public
+    // `/api/v1/messages` endpoint (which share the send core below)
+    // stay unsigned. There is no human author to attribute there.
     const { data: profile } = await supabase
       .from('profiles')
-      .select('account_id')
+      .select('account_id, full_name, signature_enabled')
       .eq('user_id', user.id)
       .maybeSingle()
     const accountId = profile?.account_id as string | undefined
@@ -89,13 +95,23 @@ export async function POST(request: Request) {
       )
     }
 
+    // Sign BEFORE validating: the signature counts against the media
+    // caption cap, so a caption that only fits unsigned should be
+    // rejected rather than silently truncated by the provider.
+    const signedText = signOutboundText({
+      text: content_text,
+      messageType: message_type,
+      enabled: profile?.signature_enabled === true,
+      fullName: profile?.full_name as string | null | undefined,
+    })
+
     // Validate the message shape up front — before the contact_id path
     // finds-or-creates a conversation — so an invalid payload 400s
     // without leaving an orphan empty conversation behind.
     try {
       validateSendMessageParams({
         messageType: message_type,
-        contentText: content_text,
+        contentText: signedText,
         mediaUrl: media_url,
         templateName: template_name,
         interactivePayload: interactive_payload,
@@ -175,7 +191,7 @@ export async function POST(request: Request) {
       const result = await sendMessageToConversation(supabase, accountId, {
         conversationId,
         messageType: message_type,
-        contentText: content_text,
+        contentText: signedText,
         mediaUrl: media_url,
         filename,
         templateName: template_name,
