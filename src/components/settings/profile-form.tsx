@@ -15,7 +15,9 @@ import {
   AvatarImage,
 } from '@/components/ui/avatar';
 import { Card, CardContent } from '@/components/ui/card';
+import { Switch } from '@/components/ui/switch';
 import { useTranslations } from 'next-intl';
+import { firstName } from '@/lib/whatsapp/signature';
 import { SettingsPanelHead } from './settings-panel-head';
 
 const MAX_AVATAR_BYTES = 2 * 1024 * 1024;
@@ -44,12 +46,14 @@ export function ProfileForm() {
   const [removeAvatar, setRemoveAvatar] = useState(false);
   const [saving, setSaving] = useState(false);
   const [emailChangePending, setEmailChangePending] = useState(false);
+  const [signatureEnabled, setSignatureEnabled] = useState(false);
 
   // Seed form state once the profile loads.
   useEffect(() => {
     if (!profile) return;
     setFullName(profile.full_name ?? '');
     setEmail(profile.email ?? '');
+    setSignatureEnabled(profile.signature_enabled === true);
   }, [profile]);
 
   // Cleanup object URLs to avoid leaks.
@@ -145,6 +149,7 @@ export function ProfileForm() {
         .update({
           full_name: trimmedName,
           avatar_url: nextAvatarUrl,
+          signature_enabled: signatureEnabled,
         })
         .eq('user_id', user.id);
       if (updateError) {
@@ -195,8 +200,13 @@ export function ProfileForm() {
     !!profile &&
     (fullName.trim() !== (profile.full_name ?? '') ||
       email.trim().toLowerCase() !== (profile.email ?? '').toLowerCase() ||
+      signatureEnabled !== (profile.signature_enabled === true) ||
       pendingAvatar !== null ||
       removeAvatar);
+
+  // Preview uses the name currently in the form, not the saved one,
+  // so editing the display name updates the sample as you type.
+  const signatureName = firstName(fullName) ?? firstName(profile?.full_name);
 
   const joined = user?.created_at
     ? new Date(user.created_at).toLocaleDateString(undefined, {
@@ -301,6 +311,49 @@ export function ProfileForm() {
                   })}
                 </span>
               </p>
+            )}
+          </div>
+
+          {/* Message signature (migration 042) */}
+          <div className="space-y-3 border-t border-border pt-6">
+            <div className="flex items-start justify-between gap-4">
+              <div className="space-y-1">
+                <Label htmlFor="profile-signature" className="text-foreground">
+                  {t('signature')}
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  {t('signatureHint')}
+                </p>
+              </div>
+              <Switch
+                id="profile-signature"
+                checked={signatureEnabled}
+                onCheckedChange={setSignatureEnabled}
+                disabled={saving || !profile}
+              />
+            </div>
+
+            {signatureEnabled && (
+              <div className="rounded-lg border border-border bg-muted p-3">
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  {t('signaturePreview')}
+                </p>
+                {signatureName ? (
+                  <div className="rounded-md bg-background px-3 py-2 text-sm">
+                    <span className="font-bold text-foreground">
+                      {signatureName}
+                    </span>
+                    <br />
+                    <span className="text-muted-foreground">
+                      {t('signatureSample')}
+                    </span>
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    {t('signatureNoName')}
+                  </p>
+                )}
+              </div>
             )}
           </div>
 

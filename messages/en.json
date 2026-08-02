@@ -1712,7 +1712,12 @@
       "cancel": "Cancel",
       "signingOut": "Signing out…",
       "signOutEverywhere": "Sign out everywhere",
-      "signOutFailed": "Sign-out failed: {message}"
+      "signOutFailed": "Sign-out failed: {message}",
+      "signature": "Sign your messages",
+      "signatureHint": "WhatsApp shows only the business name to customers. Turn this on to prefix your first name to messages you send from the inbox, so people know who they are talking to. Automated messages from flows and broadcasts are never signed.",
+      "signaturePreview": "Preview",
+      "signatureSample": "Good morning! About the quote you asked for…",
+      "signatureNoName": "Set a display name above to use a signature."
     },
     "appearance": {
       "title": "Appearance",

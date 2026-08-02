@@ -45,6 +45,13 @@ export interface Profile {
    * `@/lib/auth/roles` rather than comparing this string directly.
    */
   account_role?: AccountRole;
+  /**
+   * When true, messages this agent sends from the dashboard are
+   * prefixed with their first name (migration 042). Per-agent, not
+   * per-account — each person decides for themselves. Flows,
+   * automations, broadcasts and the public API never sign.
+   */
+  signature_enabled?: boolean;
   created_at: string;
 }
 
