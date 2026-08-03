@@ -228,3 +228,22 @@ html[data-theme="rose"] {
     @apply font-sans;
   }
 }
+/* ============================================================
+ * Marca da instalação — troca da versão do logo por modo.
+ *
+ * O logo da Anhembi é monocromático: branco para as superfícies
+ * escuras, colorido para as claras. O app alterna claro/escuro
+ * pelo atributo `data-mode` no <html> (ver use-theme.tsx), NÃO
+ * pela classe `.dark`, então a variante `dark:` do Tailwind não
+ * alcança este caso — daí as regras explícitas abaixo.
+ *
+ * Marcar as duas imagens e esconder a que não serve (em vez de
+ * trocar o `src` no React) evita um flash de logo errado na
+ * hidratação: o modo já está no <html> antes do React subir.
+ * ============================================================ */
+html[data-mode="dark"] .brand-for-light {
+  display: none;
+}
+html[data-mode="light"] .brand-for-dark {
+  display: none;
+}

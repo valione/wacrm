@@ -31,8 +31,9 @@ export const metadata: Metadata = {
     index: false,
     follow: false,
   },
-  // Favicon: convenção de arquivo src/app/icon.svg (Next injeta o <link>
+  // Favicon: convenção de arquivo src/app/icon.png (Next injeta o <link>
   // automaticamente) — sem entrada explícita em `icons` para não duplicar.
+  // PNG e não SVG porque o monograma AM veio rasterizado da marca.
   formatDetection: {
     email: false,
     address: false,

@@ -220,17 +220,25 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
             close button is hidden since the sidebar is always-visible. */}
         <div className="flex h-14 shrink-0 items-center justify-between gap-2 border-b border-border px-4">
           <Link href="/dashboard" className="flex items-center gap-2">
-            {/* Ícone da marca (barras azuis) — fonte em CRM/branding/,
-                cópia em public/brand/. Proporção original ~1,68:1. */}
+            {/* Monograma AM — fonte em CRM/Anhembi Morumbi/branding/,
+                cópia em public/brand/. Proporção original ~0,97:1.
+                Branco no tema escuro, colorido no claro (regras
+                .brand-for-* em globals.css). */}
             <Image
-              src="/brand/display4-icon.svg"
+              src="/brand/anhembi-icon-branco.png"
               alt=""
-              width={40}
-              height={24}
+              width={26}
+              height={27}
               priority
-              // SVG não passa pelo otimizador do Next (que bloqueia o tipo
-              // por padrão — 400 "image type is not allowed").
-              unoptimized
+              className="brand-for-dark"
+            />
+            <Image
+              src="/brand/anhembi-icon-cor.png"
+              alt=""
+              width={26}
+              height={27}
+              priority
+              className="brand-for-light"
             />
             {/* Nome de marca — vem de branding.ts (env), não do i18n:
                 marca não se traduz e cada instalação tem a sua. */}

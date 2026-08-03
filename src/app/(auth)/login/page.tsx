@@ -79,19 +79,28 @@ function LoginPageInner() {
               <UsersRound className="h-6 w-6 text-primary" />
             </div>
           ) : (
-            // Logomarca completa (proporção original ~1,32:1) — fonte em
-            // CRM/branding/, cópia em public/brand/.
-            <Image
-              src="/brand/display4-logo.svg"
-              alt={t('titleWelcome')}
-              width={132}
-              height={100}
-              priority
-              // SVG não passa pelo otimizador do Next (que bloqueia o tipo
-              // por padrão — 400 "image type is not allowed").
-              unoptimized
-              className="mx-auto mb-2"
-            />
+            // Logomarca completa (proporção original ~5,5:1) — fonte em
+            // CRM/Anhembi Morumbi/branding/, cópia em public/brand/.
+            // Duas versões: a branca some no tema claro e a colorida no
+            // escuro (regras .brand-for-* em globals.css).
+            <>
+              <Image
+                src="/brand/anhembi-logo-branco.png"
+                alt={t('titleWelcome')}
+                width={220}
+                height={40}
+                priority
+                className="brand-for-dark mx-auto mb-2"
+              />
+              <Image
+                src="/brand/anhembi-logo-cor.png"
+                alt={t('titleWelcome')}
+                width={220}
+                height={40}
+                priority
+                className="brand-for-light mx-auto mb-2"
+              />
+            </>
           )}
           <CardTitle className="text-xl text-foreground">
             {inviteToken ? t('titleAccept') : t('titleWelcome')}
