@@ -1717,7 +1717,9 @@
       "signatureHint": "O WhatsApp mostra apenas o nome da empresa para o cliente. Ative para que seu primeiro nome apareça antes das mensagens que você envia pelo Inbox, assim o cliente sabe com quem está falando. Mensagens automáticas de fluxos e transmissões nunca são assinadas.",
       "signaturePreview": "Prévia",
       "signatureSample": "Bom dia! Sobre o orçamento que você pediu…",
-      "signatureNoName": "Defina um nome de exibição acima para usar a assinatura."
+      "signatureNoName": "Defina um nome de assinatura, ou um nome de exibição acima, para usar a assinatura.",
+      "signatureName": "Nome da assinatura",
+      "signatureNameHint": "Deixe em branco para assinar com o seu primeiro nome. Use outro nome se o atendimento tem uma persona fixa — ela continua a mesma mesmo quando muda a pessoa por trás."
     },
     "appearance": {
       "title": "Aparência",

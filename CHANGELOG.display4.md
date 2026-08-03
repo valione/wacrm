@@ -9,6 +9,32 @@ Convenção: **minor** (1.1 → 1.2) a cada deploy com ajustes e novidades;
 aparece no rodapé do app; cada versão publicada ganha uma tag git
 (`v1.0.0`, `v1.1.0`, ...).
 
+## v1.8 — 2026-08-03
+
+### Nome da assinatura configurável
+
+A v1.7 assinava com o primeiro nome do perfil. Isso não serve para o
+padrão mais comum de mesa de atendimento: a persona é fictícia de
+propósito ("Ana, do atendimento") e precisa sobreviver à troca de
+pessoa — muda o atendente, não muda o nome que o cliente conhece.
+
+Agora, ao ligar a assinatura, aparece o campo **"Nome da assinatura"**:
+
+- **Em branco** → assina com o primeiro nome do perfil (comportamento
+  da v1.7, inalterado para quem já ativou).
+- **Preenchido** → assina com o que estiver ali. Aceita nome composto
+  ("Ana | Atendimento"), até 40 caracteres.
+
+Detalhes:
+
+- Asteriscos e outros caracteres de formatação do WhatsApp são
+  removidos do nome — um `*` solto quebraria o negrito do resto da
+  mensagem. Quebras de linha viram espaço.
+- A prévia no perfil usa exatamente a mesma resolução do envio, então
+  o que você vê ali é o que o cliente recebe.
+- Migração `043_agent_signature_name.sql` (coluna
+  `profiles.signature_name`, opcional, com CHECK de 40 caracteres).
+
 ## v1.7 — 2026-08-01
 
 ### Assinatura do atendente nas mensagens

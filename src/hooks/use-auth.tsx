@@ -41,6 +41,11 @@ interface Profile {
    * narrowed defensively for deployments that haven't migrated yet.
    */
   signature_enabled: boolean;
+  /**
+   * Customer-facing persona for the signature (migration 043).
+   * Null/empty falls back to the first word of `full_name`.
+   */
+  signature_name: string | null;
 }
 
 interface AccountSummary {
@@ -144,7 +149,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { data, error } = await supabase
         .from("profiles")
         .select(
-          "id, full_name, email, avatar_url, role, beta_features, account_id, account_role, signature_enabled",
+          "id, full_name, email, avatar_url, role, beta_features, account_id, account_role, signature_enabled, signature_name",
         )
         .eq("user_id", userId)
         .maybeSingle();
@@ -219,6 +224,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           account_id: data.account_id ?? null,
           account_role: accountRole,
           signature_enabled: data.signature_enabled === true,
+          signature_name: data.signature_name ?? null,
         });
         setAccount(accountRow);
       } else {

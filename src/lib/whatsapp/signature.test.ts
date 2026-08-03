@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest'
-import { firstName, applySignature, signOutboundText } from './signature'
+import {
+  firstName,
+  applySignature,
+  signOutboundText,
+  resolveSignatureName,
+  MAX_SIGNATURE_NAME,
+} from './signature'
 
 describe('firstName', () => {
   it('takes the first word of a display name', () => {
@@ -38,6 +44,43 @@ describe('applySignature', () => {
     expect(applySignature('*Marcos*\nBom dia!', 'Ana')).toBe(
       '*Ana*\n*Marcos*\nBom dia!',
     )
+  })
+})
+
+describe('resolveSignatureName', () => {
+  it('prefers the persona over the real name', () => {
+    expect(resolveSignatureName('Ana', 'Marcos Silva')).toBe('Ana')
+  })
+
+  it('keeps a multi-word persona intact', () => {
+    expect(resolveSignatureName('Ana | Atendimento', 'Marcos Silva')).toBe(
+      'Ana | Atendimento',
+    )
+  })
+
+  it('falls back to the first name when the persona is unset or blank', () => {
+    expect(resolveSignatureName(null, 'Marcos Silva')).toBe('Marcos')
+    expect(resolveSignatureName('', 'Marcos Silva')).toBe('Marcos')
+    expect(resolveSignatureName('   ', 'Marcos Silva')).toBe('Marcos')
+  })
+
+  it('strips WhatsApp markup that would break the bold wrapper', () => {
+    expect(resolveSignatureName('*Ana*', null)).toBe('Ana')
+    expect(resolveSignatureName('An_a~`', null)).toBe('Ana')
+  })
+
+  it('collapses line breaks so the signature stays on one line', () => {
+    expect(resolveSignatureName('Ana\nSuporte', null)).toBe('Ana Suporte')
+  })
+
+  it('caps the length at the DB limit', () => {
+    const long = 'A'.repeat(MAX_SIGNATURE_NAME + 20)
+    expect(resolveSignatureName(long, null)).toHaveLength(MAX_SIGNATURE_NAME)
+  })
+
+  it('returns null when neither source is usable', () => {
+    expect(resolveSignatureName(null, null)).toBeNull()
+    expect(resolveSignatureName('***', '  ')).toBeNull()
   })
 })
 
@@ -83,6 +126,17 @@ describe('signOutboundText', () => {
         fullName: 'Marcos Silva',
       }),
     ).toBe('Bom dia!')
+  })
+
+  it('signs with the persona when one is set', () => {
+    expect(
+      signOutboundText({
+        ...on,
+        text: 'Bom dia!',
+        messageType: 'text',
+        signatureName: 'Ana',
+      }),
+    ).toBe('*Ana*\nBom dia!')
   })
 
   it('passes through when the profile has no usable name', () => {

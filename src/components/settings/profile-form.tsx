@@ -17,7 +17,11 @@ import {
 import { Card, CardContent } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
 import { useTranslations } from 'next-intl';
-import { firstName } from '@/lib/whatsapp/signature';
+import {
+  firstName,
+  resolveSignatureName,
+  MAX_SIGNATURE_NAME,
+} from '@/lib/whatsapp/signature';
 import { SettingsPanelHead } from './settings-panel-head';
 
 const MAX_AVATAR_BYTES = 2 * 1024 * 1024;
@@ -47,6 +51,7 @@ export function ProfileForm() {
   const [saving, setSaving] = useState(false);
   const [emailChangePending, setEmailChangePending] = useState(false);
   const [signatureEnabled, setSignatureEnabled] = useState(false);
+  const [signatureNameInput, setSignatureNameInput] = useState('');
 
   // Seed form state once the profile loads.
   useEffect(() => {
@@ -54,6 +59,7 @@ export function ProfileForm() {
     setFullName(profile.full_name ?? '');
     setEmail(profile.email ?? '');
     setSignatureEnabled(profile.signature_enabled === true);
+    setSignatureNameInput(profile.signature_name ?? '');
   }, [profile]);
 
   // Cleanup object URLs to avoid leaks.
@@ -150,6 +156,9 @@ export function ProfileForm() {
           full_name: trimmedName,
           avatar_url: nextAvatarUrl,
           signature_enabled: signatureEnabled,
+          // Empty means "use my first name" — store NULL rather than
+          // '' so the DB reflects the absence, not a blank persona.
+          signature_name: signatureNameInput.trim() || null,
         })
         .eq('user_id', user.id);
       if (updateError) {
@@ -201,12 +210,16 @@ export function ProfileForm() {
     (fullName.trim() !== (profile.full_name ?? '') ||
       email.trim().toLowerCase() !== (profile.email ?? '').toLowerCase() ||
       signatureEnabled !== (profile.signature_enabled === true) ||
+      signatureNameInput.trim() !== (profile.signature_name ?? '') ||
       pendingAvatar !== null ||
       removeAvatar);
 
-  // Preview uses the name currently in the form, not the saved one,
-  // so editing the display name updates the sample as you type.
-  const signatureName = firstName(fullName) ?? firstName(profile?.full_name);
+  // Preview uses what's currently in the form, not the saved row, so
+  // both the persona field and the display name update the sample as
+  // you type. Same resolution the send path uses.
+  const signatureName =
+    resolveSignatureName(signatureNameInput, fullName) ??
+    firstName(profile?.full_name);
 
   const joined = user?.created_at
     ? new Date(user.created_at).toLocaleDateString(undefined, {
@@ -332,6 +345,28 @@ export function ProfileForm() {
                 disabled={saving || !profile}
               />
             </div>
+
+            {signatureEnabled && (
+              <div className="space-y-2">
+                <Label
+                  htmlFor="profile-signature-name"
+                  className="text-foreground"
+                >
+                  {t('signatureName')}
+                </Label>
+                <Input
+                  id="profile-signature-name"
+                  value={signatureNameInput}
+                  onChange={(e) => setSignatureNameInput(e.target.value)}
+                  placeholder={firstName(fullName) ?? 'Ana'}
+                  maxLength={MAX_SIGNATURE_NAME}
+                  disabled={saving}
+                />
+                <p className="text-xs text-muted-foreground">
+                  {t('signatureNameHint')}
+                </p>
+              </div>
+            )}
 
             {signatureEnabled && (
               <div className="rounded-lg border border-border bg-muted p-3">

@@ -34,6 +34,9 @@
 /** Message kinds that must never be signed. */
 const UNSIGNABLE_TYPES = new Set(["template", "interactive"]);
 
+/** Mirrors the CHECK on `profiles.signature_name` (migration 043). */
+export const MAX_SIGNATURE_NAME = 40;
+
 /**
  * First word of a display name, for a signature that reads the way
  * people actually talk. "Marcos Silva Pereira" → "Marcos".
@@ -46,6 +49,37 @@ export function firstName(fullName: string | null | undefined): string | null {
   if (!fullName) return null;
   const first = fullName.trim().split(/\s+/)[0];
   return first ? first : null;
+}
+
+/**
+ * The name to sign with (migration 043).
+ *
+ * `signatureName` is the agent's chosen customer-facing persona and
+ * wins whenever it holds anything usable; otherwise we fall back to
+ * the first word of their real name, which is 042's behavior.
+ *
+ * Asterisks and line breaks are stripped: the caller wraps the
+ * result in WhatsApp's `*bold*` markup, so a stray `*` would break
+ * the formatting for the rest of the message, and a newline would
+ * split the signature across lines.
+ */
+export function resolveSignatureName(
+  signatureName: string | null | undefined,
+  fullName: string | null | undefined,
+): string | null {
+  const custom = sanitizeName(signatureName);
+  if (custom) return custom;
+  return sanitizeName(firstName(fullName));
+}
+
+function sanitizeName(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const cleaned = value
+    .replace(/[*_~`]/g, "") // WhatsApp markup characters
+    .replace(/\s+/g, " ") // collapse newlines/tabs into single spaces
+    .trim()
+    .slice(0, MAX_SIGNATURE_NAME);
+  return cleaned ? cleaned : null;
 }
 
 /**
@@ -77,8 +111,10 @@ export function signOutboundText(params: {
   messageType: string;
   enabled: boolean;
   fullName: string | null | undefined;
+  /** Persona override; falls back to the first name when unset. */
+  signatureName?: string | null;
 }): string | null | undefined {
-  const { text, messageType, enabled, fullName } = params;
+  const { text, messageType, enabled, fullName, signatureName } = params;
 
   if (!enabled) return text;
   if (UNSIGNABLE_TYPES.has(messageType)) return text;
@@ -86,7 +122,7 @@ export function signOutboundText(params: {
   // neither is something a name should be glued onto.
   if (!text || !text.trim()) return text;
 
-  const name = firstName(fullName);
+  const name = resolveSignatureName(signatureName, fullName);
   if (!name) return text;
 
   return applySignature(text, name);

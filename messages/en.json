@@ -1717,7 +1717,9 @@
       "signatureHint": "WhatsApp shows only the business name to customers. Turn this on to prefix your first name to messages you send from the inbox, so people know who they are talking to. Automated messages from flows and broadcasts are never signed.",
       "signaturePreview": "Preview",
       "signatureSample": "Good morning! About the quote you asked for…",
-      "signatureNoName": "Set a display name above to use a signature."
+      "signatureNoName": "Set a signature name, or a display name above, to use a signature.",
+      "signatureName": "Signature name",
+      "signatureNameHint": "Leave empty to sign with your first name. Set a different name if your desk uses a customer-facing persona — it stays the same even when the person behind it changes."
     },
     "appearance": {
       "title": "Appearance",
