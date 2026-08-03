@@ -52,6 +52,13 @@ export interface Profile {
    * automations, broadcasts and the public API never sign.
    */
   signature_enabled?: boolean;
+  /**
+   * Optional customer-facing persona used in the signature
+   * (migration 043) — lets a support desk keep a name that
+   * outlives the person behind it. Empty falls back to the first
+   * word of `full_name`.
+   */
+  signature_name?: string | null;
   created_at: string;
 }
 
