@@ -267,7 +267,10 @@
       "deals": "Negócios",
       "noTags": "Sem tags",
       "noDeals": "Sem negócios",
-      "addNotePlaceholder": "Adicionar uma nota..."
+      "addNotePlaceholder": "Adicionar uma nota...",
+      "toastMoveFailed": "Não foi possível mover o negócio",
+      "addToPipeline": "Adicionar a um funil",
+      "toastCreateFailed": "Não foi possível criar o negócio"
     },
     "aiBanner": {
       "pausedTitle": "O assistente de IA está pausado aqui",

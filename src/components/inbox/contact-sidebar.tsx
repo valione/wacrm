@@ -4,7 +4,20 @@ import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
-import type { Contact, Deal, ContactNote, Tag } from "@/types";
+import type {
+  Contact,
+  Deal,
+  ContactNote,
+  Tag,
+  Pipeline,
+  PipelineStage,
+} from "@/types";
+import { toast } from "sonner";
+import { groupStagesByPipeline } from "@/lib/pipelines/stage-groups";
+import {
+  DealStageSelect,
+  AddToPipelineMenu,
+} from "@/components/inbox/deal-pipeline-controls";
 import {
   Phone,
   Mail,
@@ -23,17 +36,28 @@ import { useTranslations } from "next-intl";
 
 interface ContactSidebarProps {
   contact: Contact | null;
+  /**
+   * Open conversation in the Inbox — linked to deals created from here.
+   * Optional: without it the deal is born unlinked instead of failing.
+   */
+  conversationId?: string;
 }
 
-export function ContactSidebar({ contact }: ContactSidebarProps) {
+export function ContactSidebar({
+  contact,
+  conversationId,
+}: ContactSidebarProps) {
   const tSidebar = useTranslations("Inbox.sidebar");
   const tThread = useTranslations("Inbox.messageThread");
 
-  const { accountId } = useAuth();
+  const { accountId, isViewer, defaultCurrency } = useAuth();
   const [copied, setCopied] = useState(false);
   const [deals, setDeals] = useState<Deal[]>([]);
   const [notes, setNotes] = useState<ContactNote[]>([]);
   const [tags, setTags] = useState<(Tag & { contact_tag_id: string })[]>([]);
+  const [pipelines, setPipelines] = useState<Pipeline[]>([]);
+  const [stages, setStages] = useState<PipelineStage[]>([]);
+  const [creatingDeal, setCreatingDeal] = useState(false);
   const [newNote, setNewNote] = useState("");
   const [addingNote, setAddingNote] = useState(false);
 
@@ -42,26 +66,33 @@ export function ContactSidebar({ contact }: ContactSidebarProps) {
 
     const supabase = createClient();
 
-    // Fetch deals, notes, and tags in parallel
-    const [dealsRes, notesRes, tagsRes] = await Promise.all([
-      supabase
-        .from("deals")
-        .select("*, stage:pipeline_stages(*)")
-        .eq("contact_id", contact.id)
-        .order("created_at", { ascending: false }),
-      supabase
-        .from("contact_notes")
-        .select("*")
-        .eq("contact_id", contact.id)
-        .order("created_at", { ascending: false }),
-      supabase
-        .from("contact_tags")
-        .select("id, tag_id, tags(*)")
-        .eq("contact_id", contact.id),
-    ]);
+    // Fetch deals, notes, tags, pipelines and stages in parallel.
+    // pipelines/pipeline_stages go unfiltered by account — same pattern
+    // as pipelines/page.tsx:76-95, where RLS is the boundary.
+    const [dealsRes, notesRes, tagsRes, pipelinesRes, stagesRes] =
+      await Promise.all([
+        supabase
+          .from("deals")
+          .select("*, stage:pipeline_stages(*)")
+          .eq("contact_id", contact.id)
+          .order("created_at", { ascending: false }),
+        supabase
+          .from("contact_notes")
+          .select("*")
+          .eq("contact_id", contact.id)
+          .order("created_at", { ascending: false }),
+        supabase
+          .from("contact_tags")
+          .select("id, tag_id, tags(*)")
+          .eq("contact_id", contact.id),
+        supabase.from("pipelines").select("*").order("created_at"),
+        supabase.from("pipeline_stages").select("*").order("position"),
+      ]);
 
     if (dealsRes.data) setDeals(dealsRes.data);
     if (notesRes.data) setNotes(notesRes.data);
+    if (pipelinesRes.data) setPipelines(pipelinesRes.data);
+    if (stagesRes.data) setStages(stagesRes.data);
     if (tagsRes.data) {
       const mapped = tagsRes.data
         .filter((ct: Record<string, unknown>) => ct.tags)
@@ -118,6 +149,79 @@ export function ContactSidebar({ contact }: ContactSidebarProps) {
     }
     setAddingNote(false);
   }, [contact, newNote, accountId]);
+
+  const stageGroups = groupStagesByPipeline(pipelines, stages);
+
+  // Optimistic update, same move the board does
+  // (pipelines/page.tsx:224): flip it now, roll back with a toast if the
+  // write fails. RLS (agent role minimum, migration 017) is the real gate.
+  const handleMoveDeal = useCallback(
+    async (deal: Deal, stage: PipelineStage) => {
+      const previous = deals;
+      setDeals((current) =>
+        current.map((d) =>
+          d.id === deal.id ? { ...d, stage_id: stage.id, stage } : d,
+        ),
+      );
+
+      const supabase = createClient();
+      const { error } = await supabase
+        .from("deals")
+        .update({ stage_id: stage.id })
+        .eq("id", deal.id);
+
+      if (error) {
+        setDeals(previous);
+        toast.error(tSidebar("toastMoveFailed"));
+      }
+    },
+    [deals, tSidebar],
+  );
+
+  // Insert mirrors deal-form.tsx:200 — user_id is NOT NULL since
+  // migration 001, and status uses the form's "open" literal (the column
+  // DEFAULT is 'active', a divergence inherited from upstream).
+  const handleAddToPipeline = useCallback(
+    async (pipelineId: string, stage: PipelineStage) => {
+      if (!contact || !accountId) return;
+      setCreatingDeal(true);
+
+      const supabase = createClient();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      const user = session?.user;
+      if (!user) {
+        setCreatingDeal(false);
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from("deals")
+        .insert({
+          pipeline_id: pipelineId,
+          stage_id: stage.id,
+          contact_id: contact.id,
+          conversation_id: conversationId ?? null,
+          title: contact.name || contact.phone,
+          value: 0,
+          currency: defaultCurrency,
+          status: "open",
+          user_id: user.id,
+          account_id: accountId,
+        })
+        .select("*, stage:pipeline_stages(*)")
+        .single();
+
+      if (error || !data) {
+        toast.error(tSidebar("toastCreateFailed"));
+      } else {
+        setDeals((previous) => [data, ...previous]);
+      }
+      setCreatingDeal(false);
+    },
+    [contact, accountId, conversationId, defaultCurrency, tSidebar],
+  );
 
   if (!contact) {
     return (
@@ -233,22 +337,40 @@ export function ContactSidebar({ contact }: ContactSidebarProps) {
                         {deal.currency ?? "$"}
                         {deal.value.toLocaleString()}
                       </span>
-                      {deal.stage && (
-                        <span
-                          className="rounded-full px-1.5 py-0.5 text-[10px]"
-                          style={{
-                            backgroundColor: `${deal.stage.color}20`,
-                            color: deal.stage.color,
-                          }}
-                        >
-                          {deal.stage.name}
-                        </span>
-                      )}
+                      {deal.stage &&
+                        (isViewer ? (
+                          <span
+                            className="rounded-full px-1.5 py-0.5 text-[10px]"
+                            style={{
+                              backgroundColor: `${deal.stage.color}20`,
+                              color: deal.stage.color,
+                            }}
+                          >
+                            {deal.stage.name}
+                          </span>
+                        ) : (
+                          <DealStageSelect
+                            deal={deal}
+                            stages={
+                              stageGroups.find(
+                                (g) => g.pipeline.id === deal.pipeline_id,
+                              )?.stages ?? []
+                            }
+                            onSelect={(stage) => handleMoveDeal(deal, stage)}
+                          />
+                        ))}
                     </div>
                   </div>
                 ))
               )}
             </div>
+            {!isViewer && (
+              <AddToPipelineMenu
+                groups={stageGroups}
+                disabled={creatingDeal}
+                onSelect={handleAddToPipeline}
+              />
+            )}
           </div>
 
           {/* Divider */}
