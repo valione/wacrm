@@ -48,7 +48,7 @@ export function DealStageSelect({
           <DropdownMenuItem
             key={stage.id}
             className="text-xs"
-            onSelect={() => {
+            onClick={() => {
               if (stage.id !== deal.stage_id) onSelect(stage);
             }}
           >
@@ -101,7 +101,7 @@ export function AddToPipelineMenu({
               <DropdownMenuItem
                 key={stage.id}
                 className="text-xs"
-                onSelect={() => onSelect(group.pipeline.id, stage)}
+                onClick={() => onSelect(group.pipeline.id, stage)}
               >
                 <span
                   className="mr-2 h-2 w-2 shrink-0 rounded-full"
