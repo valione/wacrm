@@ -268,7 +268,9 @@
       "noTags": "No tags",
       "noDeals": "No deals",
       "addNotePlaceholder": "Add a note...",
-      "toastMoveFailed": "Could not move the deal"
+      "toastMoveFailed": "Could not move the deal",
+      "addToPipeline": "Add to a pipeline",
+      "toastCreateFailed": "Could not create the deal"
     },
     "aiBanner": {
       "pausedTitle": "AI assistant is paused here",

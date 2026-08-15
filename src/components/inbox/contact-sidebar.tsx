@@ -14,7 +14,10 @@ import type {
 } from "@/types";
 import { toast } from "sonner";
 import { groupStagesByPipeline } from "@/lib/pipelines/stage-groups";
-import { DealStageSelect } from "@/components/inbox/deal-pipeline-controls";
+import {
+  DealStageSelect,
+  AddToPipelineMenu,
+} from "@/components/inbox/deal-pipeline-controls";
 import {
   Phone,
   Mail,
@@ -33,19 +36,28 @@ import { useTranslations } from "next-intl";
 
 interface ContactSidebarProps {
   contact: Contact | null;
+  /**
+   * Open conversation in the Inbox — linked to deals created from here.
+   * Optional: without it the deal is born unlinked instead of failing.
+   */
+  conversationId?: string;
 }
 
-export function ContactSidebar({ contact }: ContactSidebarProps) {
+export function ContactSidebar({
+  contact,
+  conversationId,
+}: ContactSidebarProps) {
   const tSidebar = useTranslations("Inbox.sidebar");
   const tThread = useTranslations("Inbox.messageThread");
 
-  const { accountId, isViewer } = useAuth();
+  const { accountId, isViewer, defaultCurrency } = useAuth();
   const [copied, setCopied] = useState(false);
   const [deals, setDeals] = useState<Deal[]>([]);
   const [notes, setNotes] = useState<ContactNote[]>([]);
   const [tags, setTags] = useState<(Tag & { contact_tag_id: string })[]>([]);
   const [pipelines, setPipelines] = useState<Pipeline[]>([]);
   const [stages, setStages] = useState<PipelineStage[]>([]);
+  const [creatingDeal, setCreatingDeal] = useState(false);
   const [newNote, setNewNote] = useState("");
   const [addingNote, setAddingNote] = useState(false);
 
@@ -164,6 +176,51 @@ export function ContactSidebar({ contact }: ContactSidebarProps) {
       }
     },
     [deals, tSidebar],
+  );
+
+  // Insert mirrors deal-form.tsx:200 — user_id is NOT NULL since
+  // migration 001, and status uses the form's "open" literal (the column
+  // DEFAULT is 'active', a divergence inherited from upstream).
+  const handleAddToPipeline = useCallback(
+    async (pipelineId: string, stage: PipelineStage) => {
+      if (!contact || !accountId) return;
+      setCreatingDeal(true);
+
+      const supabase = createClient();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      const user = session?.user;
+      if (!user) {
+        setCreatingDeal(false);
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from("deals")
+        .insert({
+          pipeline_id: pipelineId,
+          stage_id: stage.id,
+          contact_id: contact.id,
+          conversation_id: conversationId ?? null,
+          title: contact.name || contact.phone,
+          value: 0,
+          currency: defaultCurrency,
+          status: "open",
+          user_id: user.id,
+          account_id: accountId,
+        })
+        .select("*, stage:pipeline_stages(*)")
+        .single();
+
+      if (error || !data) {
+        toast.error(tSidebar("toastCreateFailed"));
+      } else {
+        setDeals((previous) => [data, ...previous]);
+      }
+      setCreatingDeal(false);
+    },
+    [contact, accountId, conversationId, defaultCurrency, tSidebar],
   );
 
   if (!contact) {
@@ -307,6 +364,13 @@ export function ContactSidebar({ contact }: ContactSidebarProps) {
                 ))
               )}
             </div>
+            {!isViewer && (
+              <AddToPipelineMenu
+                groups={stageGroups}
+                disabled={creatingDeal}
+                onSelect={handleAddToPipeline}
+              />
+            )}
           </div>
 
           {/* Divider */}
