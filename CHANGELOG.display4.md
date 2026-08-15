@@ -9,6 +9,37 @@ Convenção: **minor** (1.1 → 1.2) a cada deploy com ajustes e novidades;
 aparece no rodapé do app; cada versão publicada ganha uma tag git
 (`v1.0.0`, `v1.1.0`, ...).
 
+## v1.9 — 2026-08-15
+
+### Fase do funil pela Caixa de Entrada
+
+Quem atende via o funil na barra lateral do contato, mas não podia agir
+sobre ele: para mover um card era preciso sair da conversa e abrir o
+board. Na prática a fase envelhecia — o atendente qualificava alguém na
+conversa e o funil não refletia isso.
+
+Agora, na seção **Negócios** da barra lateral:
+
+- **A fase virou um botão.** Clicar nela abre as fases do funil daquele
+  negócio; escolher uma move o card na hora. Escolher a fase em que ele
+  já está não faz nada.
+- **"Adicionar a um funil"** cria um negócio sem sair da conversa. O
+  menu mostra as fases agrupadas por funil — escolher a fase já define
+  o funil, então não há segunda pergunta. O negócio nasce com o nome do
+  contato como título (ou o telefone, se não houver nome), valor zero,
+  moeda da conta, e **fica vinculado à conversa aberta**, registrando de
+  qual atendimento a oportunidade saiu.
+
+Detalhes:
+
+- A mudança é otimista: aparece na hora e, se a gravação falhar, volta
+  sozinha com o aviso "Não foi possível mover o negócio".
+- Quem tem papel **visualizador** continua só enxergando a fase, sem
+  controles — o banco já barrava a escrita, agora a interface acompanha.
+- Refinar valor, título ou moeda continua sendo trabalho do board.
+- Mudar a fase por aqui **não dispara automações** — não existe gatilho
+  de "fase alterada" no produto.
+
 ## v1.8 — 2026-08-03
 
 ### Nome da assinatura configurável
