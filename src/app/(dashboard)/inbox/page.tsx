@@ -403,6 +403,21 @@ export default function InboxPage() {
     setResyncToken((n) => n + 1);
   }, []);
 
+  /**
+   * Nome/e-mail/empresa mudaram pelo painel lateral ou pelo cabeçalho. O
+   * registro salvo já vem do ContactEditDialog, então dá para atualizar
+   * tudo sem refetch: o painel e o cabeçalho leem `activeContact`, a
+   * lista lê o `contact` embutido em cada conversa.
+   */
+  const handleContactSaved = useCallback((updated: Contact) => {
+    setActiveContact((prev) => (prev?.id === updated.id ? updated : prev));
+    setConversations((prev) =>
+      prev.map((c) =>
+        c.contact_id === updated.id ? { ...c, contact: updated } : c,
+      ),
+    );
+  }, []);
+
   const handleConversationsLoaded = useCallback(
     (loaded: Conversation[]) => {
       setConversations(loaded);
@@ -725,6 +740,7 @@ export default function InboxPage() {
             onRefresh={handleManualRefresh}
             contactPanelOpen={contactPanelOpen}
             onToggleContactPanel={handleToggleContactPanel}
+            onContactSaved={handleContactSaved}
           />
         </div>
 
@@ -737,6 +753,7 @@ export default function InboxPage() {
             <ContactSidebar
               contact={activeContact}
               conversationId={activeConversation?.id}
+              onContactSaved={handleContactSaved}
             />
           </div>
         )}
