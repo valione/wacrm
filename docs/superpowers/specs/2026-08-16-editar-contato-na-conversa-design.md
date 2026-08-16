@@ -120,7 +120,7 @@ Uma chave nova por namespace já em uso, em `pt.json` e `en.json`:
 
 - `Inbox.sidebar.editContact`
 - `Inbox.messageThread.editContact`
-- `Pipelines.dealForm.editContact`
+- `Pipelines.form.editContact`
 
 Português: "Editar contato". Inglês: "Edit contact".
 
