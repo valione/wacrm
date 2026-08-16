@@ -9,6 +9,32 @@ Convenção: **minor** (1.1 → 1.2) a cada deploy com ajustes e novidades;
 aparece no rodapé do app; cada versão publicada ganha uma tag git
 (`v1.0.0`, `v1.1.0`, ...).
 
+## v1.11 — 2026-08-16
+
+### Do funil direto para a conversa
+
+O formulário do negócio tinha um link chamado **"Vincular a uma
+Conversa"** que não fazia nenhuma das duas coisas: não vinculava (o save
+nunca gravava o vínculo) e não levava à conversa (caía na caixa de
+entrada genérica).
+
+Agora:
+
+- O botão se chama **"Ver conversa"** e abre a **thread daquele
+  contato**, não a lista.
+- O negócio passa a **guardar de fato** a conversa. Antes, negócio criado
+  pelo board ficava sem vínculo para sempre; só os criados pelo Inbox
+  (v1.9) nasciam ligados.
+- **Vínculo existente nunca é trocado.** Editar o valor de um negócio
+  ligado a uma conversa não o repõe na conversa mais recente do contato
+  — a origem da oportunidade se mantém.
+
+Contato sem conversa nenhuma continua sem botão.
+
+Consequência a saber: como a v1.10 apaga os negócios junto com a
+conversa, negócios criados pelo board agora também são apagados quando a
+conversa vinculada é apagada.
+
 ## v1.10 — 2026-08-16
 
 ### Apagar conversa
