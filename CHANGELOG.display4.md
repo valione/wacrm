@@ -9,6 +9,37 @@ Convenção: **minor** (1.1 → 1.2) a cada deploy com ajustes e novidades;
 aparece no rodapé do app; cada versão publicada ganha uma tag git
 (`v1.0.0`, `v1.1.0`, ...).
 
+## v1.10 — 2026-08-16
+
+### Apagar conversa
+
+Não havia como apagar uma conversa pelo app. Conversa de teste, engano
+ou número errado ficava para sempre no Inbox — a única saída era SQL
+direto no banco.
+
+Agora o cabeçalho da conversa tem um menu **⋮** com **"Apagar
+conversa"**:
+
+- A conversa sai da lista na hora e aparece um aviso com **Desfazer**.
+- Passados **7 segundos** sem desfazer, ela é apagada de verdade, junto
+  com todas as mensagens.
+- **Os negócios ligados àquela conversa são apagados junto** — e o aviso
+  diz exatamente isso ("Conversa e 1 negócio(s) apagados"), para a perda
+  nunca ser silenciosa.
+- Quem tem papel **visualizador** não vê o menu.
+
+Detalhes:
+
+- A exclusão roda numa transação única no banco: ou apaga conversa e
+  negócios, ou não apaga nada.
+- Fechar a aba antes dos 7 segundos **cancela** a exclusão — a conversa
+  volta ao recarregar. É o lado seguro para errar.
+- Enquanto o prazo corre, a conversa ainda existe: se o contato
+  responder nesse intervalo, a mensagem é apagada junto.
+- Apagar aqui não apaga nada no WhatsApp do contato.
+
+**Requer a migração 044** aplicada no banco antes do deploy.
+
 ## v1.9 — 2026-08-15
 
 ### Fase do funil pela Caixa de Entrada
