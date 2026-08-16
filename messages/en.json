@@ -168,7 +168,12 @@
       "selectConversation": "Select a conversation",
       "selectConversationHint": "Choose a conversation from the left to start messaging",
       "today": "Today",
-      "yesterday": "Yesterday"
+      "yesterday": "Yesterday",
+      "deleteConversation": "Delete conversation",
+      "deletedNoDeals": "Conversation deleted",
+      "deletedWithDeals": "Conversation and {count} deal(s) deleted",
+      "undo": "Undo",
+      "deleteFailed": "Could not delete the conversation"
     },
     "origin": {
       "ad": "Ad",
