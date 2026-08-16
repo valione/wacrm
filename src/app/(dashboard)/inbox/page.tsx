@@ -719,6 +719,7 @@ export default function InboxPage() {
             onUpdateMessage={handleUpdateMessage}
             onStatusChange={handleStatusChange}
             onAssignChange={handleAssignChange}
+            onDelete={handleDeleteConversation}
             onBack={handleCloseConversation}
             resyncToken={resyncToken}
             onRefresh={handleManualRefresh}
