@@ -9,6 +9,30 @@ Convenção: **minor** (1.1 → 1.2) a cada deploy com ajustes e novidades;
 aparece no rodapé do app; cada versão publicada ganha uma tag git
 (`v1.0.0`, `v1.1.0`, ...).
 
+## v1.12 — 2026-08-16
+
+### Editar o contato de onde ele aparece
+
+Corrigir o nome de um contato — o caso mais comum, quem chega pelo
+WhatsApp e entra no CRM só com o telefone — exigia sair da conversa, ir
+até Contatos, achar a pessoa na lista, editar e voltar.
+
+Agora o mesmo formulário de sempre (nome, telefone, e-mail, empresa e
+tags) abre a partir de três lugares:
+
+- **Painel do contato na Caixa de Entrada** — lápis ao lado do nome.
+- **Cabeçalho da conversa** — o nome virou botão.
+- **Modal do negócio no funil** — lápis ao lado do seletor de contato.
+
+Salvou, o nome novo aparece na hora no cabeçalho, no painel e na lista de
+conversas, sem recarregar a página.
+
+É o formulário já existente, não um segundo jeito de editar contato: as
+regras de telefone duplicado e o índice único continuam valendo igual.
+
+Quem tem perfil **viewer** não vê nenhum dos três botões — e a política
+do banco já barrava a escrita de qualquer forma.
+
 ## v1.11 — 2026-08-16
 
 ### Do funil direto para a conversa
