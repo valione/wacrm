@@ -408,12 +408,17 @@ export function DealForm({
                 <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
                   {t("status")}
                 </p>
-                <div className="flex gap-2">
+                {/* Empilhados, não lado a lado: o Button traz
+                    `whitespace-nowrap` e um flex item mantém
+                    `min-width: auto`, então os rótulos em português
+                    ("Marcar como Perdido") não encolhiam e vazavam para
+                    fora do painel. Em coluna cabe qualquer tradução. */}
+                <div className="flex flex-col gap-2">
                   <Button
                     type="button"
                     onClick={() => handleStatusChange("won")}
                     disabled={!!statusAction || deal.status === "won"}
-                    className="flex-1 bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                    className="w-full bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
                   >
                     {statusAction === "won" ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
@@ -428,7 +433,7 @@ export function DealForm({
                     type="button"
                     onClick={() => handleStatusChange("lost")}
                     disabled={!!statusAction || deal.status === "lost"}
-                    className="flex-1 bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
+                    className="w-full bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
                   >
                     {statusAction === "lost" ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
