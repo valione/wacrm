@@ -27,6 +27,8 @@ import {
   RefreshCw,
   PanelRightOpen,
   PanelRightClose,
+  MoreVertical,
+  Trash2,
 } from "lucide-react";
 import { format, isToday, isYesterday, differenceInHours } from "date-fns";
 import { useTranslations } from "next-intl";
@@ -69,6 +71,12 @@ function renderTemplateBody(body: string, params: string[]): string {
 interface MessageThreadProps {
   conversation: Conversation | null;
   contact: Contact | null;
+  /**
+   * Delete the whole conversation. Optional: without the handler the
+   * menu item doesn't render. The Inbox page runs it (deferred delete
+   * with undo).
+   */
+  onDelete?: (conversationId: string) => void;
   messages: Message[];
   onMessagesLoaded: (messages: Message[]) => void;
   onNewMessage: (message: Message) => void;
@@ -163,6 +171,7 @@ export function MessageThread({
   onUpdateMessage,
   onStatusChange,
   onAssignChange,
+  onDelete,
   onBack,
   resyncToken = 0,
   onRefresh,
@@ -174,7 +183,7 @@ export function MessageThread({
   const tTimer = useTranslations("Inbox.sessionTimer");
   const tQuote = useTranslations("Inbox.replyQuote");
 
-  const { user } = useAuth();
+  const { user, isViewer } = useAuth();
   const { getPresence, getRow, now } = usePresence();
   // WAHA has no 24h customer-service window; Meta (or no config yet)
   // keeps it. `null` while resolving is treated as "has the window" so
@@ -1088,6 +1097,28 @@ export function MessageThread({
               )}
             </DropdownMenuContent>
           </DropdownMenu>
+
+          {/* Destructive actions — deliberately NOT in the sidebar list,
+              so it can't become an accidental click. */}
+          {onDelete && conversation && !isViewer && (
+            <DropdownMenu>
+              <DropdownMenuTrigger className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground">
+                <MoreVertical className="h-3.5 w-3.5" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="end"
+                className="border-border bg-popover"
+              >
+                <DropdownMenuItem
+                  onClick={() => onDelete(conversation.id)}
+                  className="text-sm text-destructive"
+                >
+                  <Trash2 className="mr-2 h-3.5 w-3.5" />
+                  {t("deleteConversation")}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </div>
       </div>
 
