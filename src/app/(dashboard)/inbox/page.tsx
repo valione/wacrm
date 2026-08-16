@@ -16,6 +16,7 @@ import { ContactSidebar } from "@/components/inbox/contact-sidebar";
 import { NewConversationDialog } from "@/components/inbox/new-conversation-dialog";
 import { useProviderCapabilities } from "@/lib/whatsapp/use-provider-capabilities";
 import { canStartConversation } from "@/lib/whatsapp/can-start-conversation";
+import { deleteNotice } from "@/lib/conversations/delete-notice";
 import { toast } from "sonner";
 import { WifiOff } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -26,6 +27,7 @@ const CONTACT_PANEL_STORAGE_KEY = "wacrm:inbox:contact-panel-open";
 
 export default function InboxPage() {
   const t = useTranslations("Inbox.page");
+  const tThread = useTranslations("Inbox.messageThread");
   const router = useRouter();
   const searchParams = useSearchParams();
   /**
@@ -501,6 +503,76 @@ export default function InboxPage() {
     autoSelectedForDeepLinkRef.current = null;
     router.replace("/inbox", { scroll: false });
   }, [router]);
+
+  /**
+   * Deferred delete: drops from the list now, hits the DB after 7s.
+   *
+   * Known and accepted limitation (see spec): the timer lives in the
+   * browser. Closing the tab before 7s CANCELS the delete — the
+   * conversation comes back on reload. That's the safe side to err on.
+   */
+  const handleDeleteConversation = useCallback(
+    async (conversationId: string) => {
+      const supabase = createClient();
+
+      const removed = conversations.find((c) => c.id === conversationId);
+      if (!removed) return;
+
+      const restore = () =>
+        setConversations((prev) =>
+          [removed, ...prev.filter((c) => c.id !== conversationId)].sort(
+            (a, b) =>
+              new Date(b.last_message_at ?? b.created_at).getTime() -
+              new Date(a.last_message_at ?? a.created_at).getTime(),
+          ),
+        );
+
+      // Count is only for the notice text — the deals themselves are
+      // deleted by the DB function, not here.
+      const { data: dealRows } = await supabase
+        .from("deals")
+        .select("id")
+        .eq("conversation_id", conversationId);
+      const notice = deleteNotice(dealRows?.length ?? 0);
+
+      setConversations((prev) => prev.filter((c) => c.id !== conversationId));
+      if (activeConversation?.id === conversationId) handleCloseConversation();
+
+      let undone = false;
+      const timer = setTimeout(async () => {
+        if (undone) return;
+        const { data, error } = await supabase.rpc(
+          "delete_conversation_with_deals",
+          { p_conversation_id: conversationId },
+        );
+        // `data === 0` means RLS filtered everything out silently
+        // (caller lacks the agent role) — not an error, but not a
+        // delete either.
+        if (error || data === 0) {
+          restore();
+          toast.error(tThread("deleteFailed"));
+        }
+      }, 7000);
+
+      const message =
+        notice.key === "deletedNoDeals"
+          ? tThread("deletedNoDeals")
+          : tThread("deletedWithDeals", { count: notice.count });
+
+      toast(message, {
+        duration: 7000,
+        action: {
+          label: tThread("undo"),
+          onClick: () => {
+            undone = true;
+            clearTimeout(timer);
+            restore();
+          },
+        },
+      });
+    },
+    [conversations, activeConversation, handleCloseConversation, tThread],
+  );
 
 
   /**
