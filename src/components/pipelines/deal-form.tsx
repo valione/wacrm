@@ -31,7 +31,9 @@ import {
   MessageSquare,
   DollarSign,
   Loader2,
+  Pencil,
 } from "lucide-react";
+import { ContactEditDialog } from "@/components/contacts/contact-edit-dialog";
 import { toast } from "sonner";
 import { useTranslations } from "next-intl";
 
@@ -56,7 +58,7 @@ export function DealForm({
 }: DealFormProps) {
   const t = useTranslations("Pipelines.form");
   const supabase = createClient();
-  const { accountId, defaultCurrency } = useAuth();
+  const { accountId, defaultCurrency, isViewer } = useAuth();
 
   const [title, setTitle] = useState("");
   const [value, setValue] = useState("");
@@ -73,6 +75,7 @@ export function DealForm({
     useState<Conversation | null>(null);
 
   const [saving, setSaving] = useState(false);
+  const [editContactOpen, setEditContactOpen] = useState(false);
   const [statusAction, setStatusAction] = useState<DealStatus | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -256,6 +259,7 @@ export function DealForm({
   }
 
   return (
+    <>
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="right"
@@ -281,18 +285,31 @@ export function DealForm({
 
             <div className="grid gap-2">
               <Label className="text-muted-foreground">{t("contact")}</Label>
-              <select
-                value={contactId}
-                onChange={(e) => setContactId(e.target.value)}
-                className="h-9 w-full rounded-lg border border-border bg-muted px-2.5 text-sm text-foreground outline-none focus:border-primary focus:ring-1 focus:ring-primary"
-              >
-                <option value="">{t("selectContact")}</option>
-                {contacts.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name || c.phone}
-                  </option>
-                ))}
-              </select>
+              <div className="flex items-center gap-2">
+                <select
+                  value={contactId}
+                  onChange={(e) => setContactId(e.target.value)}
+                  className="h-9 w-full rounded-lg border border-border bg-muted px-2.5 text-sm text-foreground outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+                >
+                  <option value="">{t("selectContact")}</option>
+                  {contacts.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name || c.phone}
+                    </option>
+                  ))}
+                </select>
+                {!isViewer && contactId && (
+                  <button
+                    type="button"
+                    onClick={() => setEditContactOpen(true)}
+                    aria-label={t("editContact")}
+                    title={t("editContact")}
+                    className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg border border-border text-muted-foreground hover:bg-muted hover:text-foreground"
+                  >
+                    <Pencil className="size-3.5" />
+                  </button>
+                )}
+              </div>
 
               {conversationId && (
                 <Link
@@ -493,5 +510,21 @@ export function DealForm({
         </div>
       </SheetContent>
     </Sheet>
+
+    {/* Fora do <Sheet> de propósito: um Dialog dentro do painel aninharia
+        dois portais, e a armadilha de foco do Sheet fica por cima do
+        formulário. */}
+    <ContactEditDialog
+      contactId={contactId || null}
+      open={editContactOpen}
+      onOpenChange={setEditContactOpen}
+      onSaved={(updated) => {
+        setEditContactOpen(false);
+        setContacts((prev) =>
+          prev.map((c) => (c.id === updated.id ? updated : c)),
+        );
+      }}
+    />
+    </>
   );
 }
