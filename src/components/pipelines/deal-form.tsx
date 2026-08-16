@@ -5,6 +5,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { CURRENCIES } from "@/lib/currency";
+import { resolveDealConversationId } from "@/lib/deals/resolve-conversation";
 import type {
   Contact,
   Conversation,
@@ -151,6 +152,14 @@ export function DealForm({
     };
   }, [open, contactId, supabase]);
 
+  // Single source for both the button and the save — they must not
+  // diverge. Existing link wins: editing a deal must never silently
+  // repoint it at the contact's newest conversation.
+  const conversationId = resolveDealConversationId(
+    deal?.conversation_id,
+    linkedConversation?.id,
+  );
+
   async function handleSave() {
     if (!title.trim() || !contactId || !stageId) {
       toast.error(t("toastRequired"));
@@ -168,6 +177,7 @@ export function DealForm({
       assigned_to: assignedTo || null,
       notes: notes.trim() || null,
       expected_close_date: expectedCloseDate || null,
+      conversation_id: conversationId,
     };
 
     if (deal) {
@@ -284,13 +294,13 @@ export function DealForm({
                 ))}
               </select>
 
-              {linkedConversation && (
+              {conversationId && (
                 <Link
-                  href="/inbox"
+                  href={`/inbox?c=${conversationId}`}
                   className="mt-1 inline-flex items-center gap-1.5 self-start rounded-md bg-primary/10 px-2 py-1 text-xs text-primary hover:bg-primary/20"
                 >
                   <MessageSquare className="h-3 w-3" />
-                  {t("linkToConversation")}
+                  {t("viewConversation")}
                 </Link>
               )}
             </div>
