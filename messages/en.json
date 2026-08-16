@@ -147,6 +147,7 @@
       "newConversation": "New conversation"
     },
     "messageThread": {
+      "editContact": "Edit contact",
       "backToConversations": "Back to conversations",
       "hideContactPanel": "Hide contact panel",
       "showContactPanel": "Show contact panel",
@@ -266,6 +267,7 @@
       "send": "Send template"
     },
     "sidebar": {
+      "editContact": "Edit contact",
       "contactInfo": "Contact info",
       "tags": "Tags",
       "notes": "Notes",
@@ -549,6 +551,7 @@
       "lost": "Lost"
     },
     "form": {
+      "editContact": "Edit contact",
       "editDeal": "Edit Deal",
       "newDeal": "New Deal",
       "title": "Title",

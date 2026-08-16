@@ -29,6 +29,7 @@ import {
   PanelRightClose,
   MoreVertical,
   Trash2,
+  Pencil,
 } from "lucide-react";
 import { format, isToday, isYesterday, differenceInHours } from "date-fns";
 import { useTranslations } from "next-intl";
@@ -51,6 +52,7 @@ import {
 import { deleteAccountMedia } from "@/lib/storage/upload-media";
 import { useProviderCapabilities } from "@/lib/whatsapp/use-provider-capabilities";
 import { TemplatePicker } from "./template-picker";
+import { ContactEditDialog } from "@/components/contacts/contact-edit-dialog";
 import { AiThreadBanner } from "./ai-thread-banner";
 import { buildReplyPreview } from "./reply-quote";
 import { toast } from "sonner";
@@ -118,6 +120,11 @@ interface MessageThreadProps {
    */
   contactPanelOpen?: boolean;
   onToggleContactPanel?: () => void;
+  /**
+   * Contato relido depois de editado pelo nome no cabeçalho. A página
+   * propaga para o painel lateral e para a lista de conversas.
+   */
+  onContactSaved?: (contact: Contact) => void;
 }
 
 function formatDateSeparator(dateStr: string, t: ReturnType<typeof useTranslations>): string {
@@ -177,6 +184,7 @@ export function MessageThread({
   onRefresh,
   contactPanelOpen,
   onToggleContactPanel,
+  onContactSaved,
 }: MessageThreadProps) {
   const t = useTranslations("Inbox.messageThread");
   const tOrigin = useTranslations("Inbox.origin");
@@ -192,6 +200,7 @@ export function MessageThread({
   const [loading, setLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [templateModalOpen, setTemplateModalOpen] = useState(false);
+  const [editContactOpen, setEditContactOpen] = useState(false);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [reactions, setReactions] = useState<MessageReaction[]>([]);
   // Purely visual spin state for the manual-refresh button. The actual
@@ -924,7 +933,23 @@ export function MessageThread({
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-1.5">
-              <h2 className="truncate text-sm font-semibold text-foreground">{displayName}</h2>
+              {isViewer ? (
+                <h2 className="truncate text-sm font-semibold text-foreground">
+                  {displayName}
+                </h2>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setEditContactOpen(true)}
+                  title={t("editContact")}
+                  className="group flex min-w-0 items-center gap-1 rounded text-left hover:bg-muted"
+                >
+                  <h2 className="truncate text-sm font-semibold text-foreground">
+                    {displayName}
+                  </h2>
+                  <Pencil className="size-3 flex-shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
+                </button>
+              )}
               {/* Origem da conversa (captura de marketing): "Anúncio" quando
                   veio de um anúncio CTWA, senão "Site" quando veio de um
                   marcador [ref:] do site. Ad_referral tem precedência. */}
@@ -1231,6 +1256,16 @@ export function MessageThread({
         open={templateModalOpen}
         onOpenChange={setTemplateModalOpen}
         onSelect={handleSendTemplate}
+      />
+
+      <ContactEditDialog
+        contactId={contact.id}
+        open={editContactOpen}
+        onOpenChange={setEditContactOpen}
+        onSaved={(updated) => {
+          setEditContactOpen(false);
+          onContactSaved?.(updated);
+        }}
       />
     </div>
   );
