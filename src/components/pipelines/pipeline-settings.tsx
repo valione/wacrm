@@ -336,10 +336,14 @@ export function PipelineSettings({
             </div>
 
             <DialogFooter className="border-border bg-popover/50">
+              {/* `variant="destructive"` pinta o texto de text-destructive
+                  contando com o fundo suave bg-destructive/10. Trocando o
+                  fundo por vermelho sólido, o texto precisa vir junto —
+                  senão fica vermelho sobre vermelho, ilegível. */}
               <Button
                 variant="destructive"
                 onClick={() => setShowDeleteConfirm(true)}
-                className="mr-auto bg-red-600 hover:bg-red-700"
+                className="mr-auto bg-red-600 text-white hover:bg-red-700"
               >
                 {t("deletePipeline")}
               </Button>

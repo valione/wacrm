@@ -9,6 +9,16 @@ Convenção: **minor** (1.1 → 1.2) a cada deploy com ajustes e novidades;
 aparece no rodapé do app; cada versão publicada ganha uma tag git
 (`v1.0.0`, `v1.1.0`, ...).
 
+## v1.12.1 — 2026-08-16
+
+Dois botões consertados, sem mudança de comportamento:
+
+- **"Excluir Pipeline"** estava ilegível — texto vermelho sobre fundo
+  vermelho.
+- **"Marcar como Ganho / Perdido"** no negócio agora ficam um embaixo do
+  outro. Lado a lado, o rótulo em português não cabia e vazava para fora
+  do painel.
+
 ## v1.12 — 2026-08-16
 
 ### Editar o contato de onde ele aparece
