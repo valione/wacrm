@@ -147,6 +147,7 @@
       "newConversation": "Nova conversa"
     },
     "messageThread": {
+      "editContact": "Editar contato",
       "backToConversations": "Voltar para as conversas",
       "hideContactPanel": "Ocultar painel do contato",
       "showContactPanel": "Mostrar painel do contato",
@@ -266,6 +267,7 @@
       "send": "Enviar modelo"
     },
     "sidebar": {
+      "editContact": "Editar contato",
       "contactInfo": "Informações do contato",
       "tags": "Tags",
       "notes": "Notas",
@@ -549,6 +551,7 @@
       "lost": "Perdido"
     },
     "form": {
+      "editContact": "Editar contato",
       "editDeal": "Editar Negócio",
       "newDeal": "Novo Negócio",
       "title": "Título",

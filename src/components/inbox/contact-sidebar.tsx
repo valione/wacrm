@@ -18,6 +18,7 @@ import {
   DealStageSelect,
   AddToPipelineMenu,
 } from "@/components/inbox/deal-pipeline-controls";
+import { ContactEditDialog } from "@/components/contacts/contact-edit-dialog";
 import {
   Phone,
   Mail,
@@ -28,6 +29,7 @@ import {
   DollarSign,
   StickyNote,
   Plus,
+  Pencil,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -41,11 +43,17 @@ interface ContactSidebarProps {
    * Optional: without it the deal is born unlinked instead of failing.
    */
   conversationId?: string;
+  /**
+   * Contato relido depois de editado aqui — a página propaga para o
+   * cabeçalho da conversa e para a lista.
+   */
+  onContactSaved?: (contact: Contact) => void;
 }
 
 export function ContactSidebar({
   contact,
   conversationId,
+  onContactSaved,
 }: ContactSidebarProps) {
   const tSidebar = useTranslations("Inbox.sidebar");
   const tThread = useTranslations("Inbox.messageThread");
@@ -58,6 +66,7 @@ export function ContactSidebar({
   const [pipelines, setPipelines] = useState<Pipeline[]>([]);
   const [stages, setStages] = useState<PipelineStage[]>([]);
   const [creatingDeal, setCreatingDeal] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
   const [newNote, setNewNote] = useState("");
   const [addingNote, setAddingNote] = useState(false);
 
@@ -251,9 +260,22 @@ export function ContactSidebar({
                 initials
               )}
             </div>
-            <h3 className="mt-3 text-sm font-semibold text-foreground">
-              {displayName}
-            </h3>
+            <div className="mt-3 flex items-center gap-1.5">
+              <h3 className="text-sm font-semibold text-foreground">
+                {displayName}
+              </h3>
+              {!isViewer && (
+                <button
+                  type="button"
+                  onClick={() => setEditOpen(true)}
+                  aria-label={tSidebar("editContact")}
+                  title={tSidebar("editContact")}
+                  className="rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                >
+                  <Pencil className="size-3.5" />
+                </button>
+              )}
+            </div>
             {contact.company && (
               <p className="text-xs text-muted-foreground">{contact.company}</p>
             )}
@@ -420,6 +442,16 @@ export function ContactSidebar({
           </div>
         </div>
       </ScrollArea>
+
+      <ContactEditDialog
+        contactId={contact.id}
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        onSaved={(updated) => {
+          setEditOpen(false);
+          onContactSaved?.(updated);
+        }}
+      />
     </div>
   );
 }
