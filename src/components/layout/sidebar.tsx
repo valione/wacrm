@@ -220,25 +220,17 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
             close button is hidden since the sidebar is always-visible. */}
         <div className="flex h-14 shrink-0 items-center justify-between gap-2 border-b border-border px-4">
           <Link href="/dashboard" className="flex items-center gap-2">
-            {/* Monograma AM — fonte em CRM/Anhembi Morumbi/branding/,
-                cópia em public/brand/. Proporção original ~0,97:1.
-                Branco no tema escuro, colorido no claro (regras
-                .brand-for-* em globals.css). */}
+            {/* Monograma AM no verde oficial — fonte em
+                CRM/Anhembi Morumbi/branding/, cópia em public/brand/.
+                Uma imagem só: o verde tem contraste suficiente nas
+                superfícies clara e escura, então não precisa da troca
+                por modo (.brand-for-*) que o logo do login usa. */}
             <Image
-              src="/brand/anhembi-icon-branco.png"
+              src="/brand/anhembi-icon-verde.png"
               alt=""
               width={26}
-              height={27}
+              height={28}
               priority
-              className="brand-for-dark"
-            />
-            <Image
-              src="/brand/anhembi-icon-cor.png"
-              alt=""
-              width={26}
-              height={27}
-              priority
-              className="brand-for-light"
             />
             {/* Nome de marca — vem de branding.ts (env), não do i18n:
                 marca não se traduz e cada instalação tem a sua. */}

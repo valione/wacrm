@@ -81,11 +81,11 @@ function LoginPageInner() {
           ) : (
             // Logomarca completa (proporção original ~5,5:1) — fonte em
             // CRM/Anhembi Morumbi/branding/, cópia em public/brand/.
-            // Duas versões: a branca some no tema claro e a colorida no
-            // escuro (regras .brand-for-* em globals.css).
+            // O símbolo AM fica sempre no verde oficial; só a assinatura
+            // muda de cor por modo (regras .brand-for-* em globals.css).
             <>
               <Image
-                src="/brand/anhembi-logo-branco.png"
+                src="/brand/anhembi-logo-escuro.png"
                 alt={t('titleWelcome')}
                 width={220}
                 height={40}
@@ -93,7 +93,7 @@ function LoginPageInner() {
                 className="brand-for-dark mx-auto mb-2"
               />
               <Image
-                src="/brand/anhembi-logo-cor.png"
+                src="/brand/anhembi-logo-claro.png"
                 alt={t('titleWelcome')}
                 width={220}
                 height={40}
