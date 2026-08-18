@@ -56,7 +56,13 @@ export function parseContactCsv(text: string): ParseContactCsvResult {
 
   const nameIdx = headers.indexOf('name');
   const emailIdx = headers.indexOf('email');
-  const companyIdx = headers.indexOf('company');
+  // `curso` é o cabeçalho das instalações de educação, onde o campo se
+  // chama "Curso de interesse" (ver src/lib/vertical.ts). `company` vem
+  // primeiro para não mudar o resultado de planilhas antigas.
+  const companyIdx =
+    headers.indexOf('company') >= 0
+      ? headers.indexOf('company')
+      : headers.indexOf('curso');
   const tagsIdx = headers.indexOf('tags');
 
   const rows: ParsedContactRow[] = [];
