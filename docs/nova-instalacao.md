@@ -59,7 +59,6 @@ git push -u origin cliente-x
 ```
 
 Notas de marca:
-
 - Nome do app NÃO é código — vai na env `NEXT_PUBLIC_APP_NAME`.
 - Instituição de ensino: `NEXT_PUBLIC_VERTICAL=educacao` renomeia o campo
   Empresa do contato para "Curso de interesse" em toda a interface, e
@@ -67,7 +66,7 @@ Notas de marca:
   (Campos Salles usa `Direito`; Anhembi Morumbi, `Publicidade e Propaganda`).
   Deixar as duas em branco mantém "Empresa". A importação de CSV passa a
   aceitar o cabeçalho `curso` além de `company`.
-- Rodapé "by _Valione Intelligence_." é fixo do produto (não mudar).
+- Rodapé "by *Valione Intelligence*." é fixo do produto (não mudar).
 - SVGs de logo usam `unoptimized` no next/image (o otimizador bloqueia SVG).
 - Atualizações do produto: `git checkout cliente-x && git merge personalizacao-display4 && git push`.
 
