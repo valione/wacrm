@@ -95,4 +95,13 @@ describe('parseContactCsv', () => {
 
     expect(parseContactCsv(csv).rows[0].company).toBe('Acme Corp');
   });
+
+  it('aceita a coluna course da versão em inglês', () => {
+    const csv = `phone,name,course
++15551234567,Alice,Law`;
+
+    const result = parseContactCsv(csv);
+    expect(result.hasCompanyColumn).toBe(true);
+    expect(result.rows[0].company).toBe('Law');
+  });
 });

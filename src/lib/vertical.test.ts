@@ -31,7 +31,6 @@ const CAMINHOS_TROCADOS = [
   'Inbox.conversationList.company',
   'Inbox.conversationList.allCompanies',
   'Automations.builder.fields.company',
-  'Automations.builder.config.placeholderContact',
   'Flows.builder.form.varKeyPlaceholder',
 ]
 

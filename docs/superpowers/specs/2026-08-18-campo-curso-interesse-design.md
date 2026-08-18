@@ -84,11 +84,18 @@ nesses seis arquivos.
 | `Inbox.conversationList.company` | Empresa | Curso |
 | `Inbox.conversationList.allCompanies` | Todas as empresas | Todos os cursos |
 | `Automations.builder.fields.company` | Empresa | Curso de interesse |
-| `Automations.builder.config.placeholderContact` | nome / e-mail / empresa | nome / e-mail / curso |
 | `Flows.builder.form.varKeyPlaceholder` | ex.: nome, email, empresa | ex.: nome, email, curso |
 
 O locale `en` recebe a tabela equivalente (`Course of interest` / `All courses`); locale
 sem tabela cai no dicionário original sem erro.
+
+**`Automations.builder.config.placeholderContact` foi removida da tabela na revisão final
+(decisão do Miguel, 2026-08-18):** esse texto é o operando passado literalmente para
+`.select(cfg.operand)` no motor de automações (`src/lib/automations/engine.ts:679`), então
+precisa nomear colunas reais do banco. O upstream em inglês já estava correto
+(`name / email / company`); trocar `company` por `curso`/`course` faria a condição
+avaliar `false` silenciosamente. O upstream em português (`nome / e-mail / empresa`) já é
+impreciso, mas isso é bug pré-existente e fora de escopo aqui.
 
 ### Dois textos que citam "empresa" e NÃO podem mudar
 
@@ -114,7 +121,7 @@ como já vale para `NEXT_PUBLIC_APP_NAME`.
 
 - `src/lib/vertical.test.ts` (novo):
   - vertical vazia → dicionário devolvido é idêntico ao recebido (protege a Display4);
-  - vertical `educacao` → exatamente as 11 chaves da tabela mudam, e nenhuma outra chave
+  - vertical `educacao` → exatamente as 10 chaves da tabela mudam, e nenhuma outra chave
     do dicionário difere (varredura recursiva comparando com o original);
   - `signatureHint` e `promptPlaceholder` seguem intactos, verificados por nome;
   - o exemplo do campo respeita a env e cai no padrão quando ela está vazia.

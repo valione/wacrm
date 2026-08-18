@@ -33,7 +33,6 @@ const EDUCACAO_PT: TabelaDeRotulos = {
   'Inbox.conversationList.company': 'Curso',
   'Inbox.conversationList.allCompanies': 'Todos os cursos',
   'Automations.builder.fields.company': 'Curso de interesse',
-  'Automations.builder.config.placeholderContact': 'nome / e-mail / curso',
   'Flows.builder.form.varKeyPlaceholder': 'ex.: nome, email, curso',
 }
 
@@ -47,7 +46,6 @@ const EDUCACAO_EN: TabelaDeRotulos = {
   'Inbox.conversationList.company': 'Course',
   'Inbox.conversationList.allCompanies': 'All courses',
   'Automations.builder.fields.company': 'Course of interest',
-  'Automations.builder.config.placeholderContact': 'name / email / course',
   'Flows.builder.form.varKeyPlaceholder': 'e.g. name, email, course',
 }
 
