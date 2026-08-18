@@ -59,8 +59,15 @@ git push -u origin cliente-x
 ```
 
 Notas de marca:
+
 - Nome do app NÃO é código — vai na env `NEXT_PUBLIC_APP_NAME`.
-- Rodapé "by *Valione Intelligence*." é fixo do produto (não mudar).
+- Instituição de ensino: `NEXT_PUBLIC_VERTICAL=educacao` renomeia o campo
+  Empresa do contato para "Curso de interesse" em toda a interface, e
+  `NEXT_PUBLIC_CONTACT_FIELD_EXAMPLE` é o exemplo mostrado dentro do campo
+  (Campos Salles usa `Direito`; Anhembi Morumbi, `Publicidade e Propaganda`).
+  Deixar as duas em branco mantém "Empresa". A importação de CSV passa a
+  aceitar o cabeçalho `curso` além de `company`.
+- Rodapé "by _Valione Intelligence_." é fixo do produto (não mudar).
 - SVGs de logo usam `unoptimized` no next/image (o otimizador bloqueia SVG).
 - Atualizações do produto: `git checkout cliente-x && git merge personalizacao-display4 && git push`.
 
@@ -84,6 +91,8 @@ UAZAPI_WEBHOOK_SECRET=<do passo 2>
 AUTOMATION_CRON_SECRET=<do passo 2>
 NEXT_PUBLIC_APP_LOCALE=pt
 NEXT_PUBLIC_APP_NAME=ClienteX | CRM
+NEXT_PUBLIC_VERTICAL=
+NEXT_PUBLIC_CONTACT_FIELD_EXAMPLE=
 NEXT_PUBLIC_SITE_URL=https://crm.clientex.com.br
 ```
 
