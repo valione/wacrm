@@ -1,6 +1,7 @@
 /**
  * CSV parsing for the contacts import modal. Shared + unit-tested so
- * tag-column handling stays aligned with phone/name/email/company.
+ * tag-column handling stays aligned with phone/name/email/company (and the
+ * education-vertical `curso`/`course` headers).
  */
 
 export interface ParsedContactRow {
@@ -35,7 +36,7 @@ export interface ParseContactCsvResult {
   rows: ParsedContactRow[];
   /** True when the CSV header includes a `tags` column. */
   hasTagsColumn: boolean;
-  /** True when the CSV header includes a `company` column. */
+  /** True when the CSV header includes a `company`, `curso`, or `course` column. */
   hasCompanyColumn: boolean;
 }
 
@@ -56,7 +57,13 @@ export function parseContactCsv(text: string): ParseContactCsvResult {
 
   const nameIdx = headers.indexOf('name');
   const emailIdx = headers.indexOf('email');
-  const companyIdx = headers.indexOf('company');
+  // `curso`/`course` são os cabeçalhos das instalações de educação, onde o
+  // campo se chama "Curso de interesse" (ver src/lib/vertical.ts). `company`
+  // vem primeiro para não mudar o resultado de planilhas antigas.
+  const companyIdx = ['company', 'curso', 'course'].reduce(
+    (idx, h) => (idx >= 0 ? idx : headers.indexOf(h)),
+    -1,
+  );
   const tagsIdx = headers.indexOf('tags');
 
   const rows: ParsedContactRow[] = [];

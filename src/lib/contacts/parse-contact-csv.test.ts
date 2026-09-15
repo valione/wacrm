@@ -70,4 +70,38 @@ describe('parseContactCsv', () => {
       ],
     });
   });
+
+  it('aceita a coluna curso como sinônimo de company', () => {
+    const csv = `phone,name,curso
++15551234567,Alice,Direito`;
+
+    const result = parseContactCsv(csv);
+    expect(result.hasCompanyColumn).toBe(true);
+    expect(result.rows[0].company).toBe('Direito');
+  });
+
+  it('continua aceitando a coluna company', () => {
+    const csv = `phone,name,company
++15551234567,Alice,Acme Corp`;
+
+    const result = parseContactCsv(csv);
+    expect(result.hasCompanyColumn).toBe(true);
+    expect(result.rows[0].company).toBe('Acme Corp');
+  });
+
+  it('prefere company quando as duas colunas existem', () => {
+    const csv = `phone,company,curso
++15551234567,Acme Corp,Direito`;
+
+    expect(parseContactCsv(csv).rows[0].company).toBe('Acme Corp');
+  });
+
+  it('aceita a coluna course da versão em inglês', () => {
+    const csv = `phone,name,course
++15551234567,Alice,Law`;
+
+    const result = parseContactCsv(csv);
+    expect(result.hasCompanyColumn).toBe(true);
+    expect(result.rows[0].company).toBe('Law');
+  });
 });
