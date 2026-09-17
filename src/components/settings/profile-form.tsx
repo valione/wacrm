@@ -23,6 +23,7 @@ import {
   MAX_SIGNATURE_NAME,
 } from '@/lib/whatsapp/signature';
 import { SettingsPanelHead } from './settings-panel-head';
+import { BrowserNotificationsCard } from './browser-notifications-card';
 
 const MAX_AVATAR_BYTES = 2 * 1024 * 1024;
 const ALLOWED_MIME = new Set([
@@ -198,7 +199,7 @@ export function ProfileForm() {
           : t('profileSaved'),
       );
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Unknown error';
+      const msg = err instanceof Error ? err.message : t('unknownError');
       toast.error(msg);
     } finally {
       setSaving(false);
@@ -440,6 +441,10 @@ export function ProfileForm() {
           </Button>
         </div>
       </form>
+
+      {/* Device-scoped, so it lives outside the profile form and its
+          Save button — flipping the switch applies immediately. */}
+      <BrowserNotificationsCard className="mt-6" />
     </section>
   );
 }

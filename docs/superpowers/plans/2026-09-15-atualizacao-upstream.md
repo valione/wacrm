@@ -650,3 +650,71 @@ Mesmo procedimento, projeto `gjdadqzwrdvjwrsdfaga`, branch `campos-salles`. Veri
 - [ ] **Step 7: Reportar o estado final**
 
 Listar, para cada instalação: commit publicado, migrações aplicadas e resultado da verificação.
+
+---
+
+### Task 10: Portar as melhorias de recebimento para `inbound.ts`
+
+**Executar logo após a Task 4** (não no fim). A Task 4 resolve `src/lib/automations/meta-send.ts`, e enquanto esse arquivo tiver marcadores de conflito a suíte de `webhook/route.test.ts` não carrega — sem ela, esta task ficaria sem rede de segurança.
+
+**Files:**
+- Modify: `src/lib/whatsapp/inbound.ts` (749 linhas, exclusivo do fork)
+- Test: `src/app/api/whatsapp/webhook/route.test.ts` (já existe, vindo do upstream)
+
+**Interfaces:**
+- Consumes: os cinco arquivos resolvidos na Task 3; `meta-send.ts` resolvido na Task 4.
+- Produces: `inbound.ts` com o comportamento do upstream; nenhuma assinatura nova.
+
+**Por que esta task existe (lacuna encontrada durante a Task 3):** o fork extraiu o pipeline de persistência do webhook para `src/lib/whatsapp/inbound.ts`, compartilhado pelos webhooks Meta, WAHA e Uazapi. O upstream manteve esse código dentro de `src/app/api/whatsapp/webhook/route.ts` e foi **lá** que aplicou suas melhorias. Como os dois lados editaram arquivos diferentes, **o git não gera conflito** — as melhorias entrariam no repositório sem nunca alcançar o código que as três instalações realmente executam. O plano original não previu isso.
+
+**A especificação desta task são os 18 testes que falham** em `src/app/api/whatsapp/webhook/route.test.ts`. Eles vieram do upstream e descrevem exatamente o comportamento a portar. Causa raiz única hoje: `.from(...).insert is not a function` em `inbound.ts`.
+
+Itens a portar (todos do "adotar sempre" do spec):
+
+1. **Deduplicação de mensagens recebidas** por `(conversation_id, message_id)` (upstream #367). A migração `045` cria o índice único que a sustenta.
+2. **Incremento atômico de não-lidas** via a função `bump_conversation_on_inbound` (upstream #369), no lugar do ler-modificar-gravar. Sem isso, duas mensagens que chegam juntas perdem uma contagem.
+3. **Reabertura de conversa fechada** ao chegar mensagem, e gravação de `media_type`.
+4. **BSUID** (`wa_user_id`, `wa_parent_user_id`, `wa_username`) na identificação do contato (upstream #519). As colunas vêm da migração `048`.
+
+**Regressão temporária a corrigir aqui:** a Task 3 passou a descartar, com log de erro, entrega da Meta sem telefone (remetente identificado só por BSUID), em vez de criar contato com `phone: ''`. Ao portar o item 4, restaure o caminho correto: identificar o contato pelo BSUID. Isso não afeta as instalações hoje (as três rodam `uazapi`), mas deixa o caminho Meta correto.
+
+- [ ] **Step 1: Ver o que os testes exigem**
+
+```bash
+npx vitest run src/app/api/whatsapp/webhook
+```
+Expected no início: 18 falhando, 12 passando. Leia as 18 mensagens — elas são os requisitos.
+
+- [ ] **Step 2: Ler as duas implementações lado a lado**
+
+```bash
+git show upstream/main:src/app/api/whatsapp/webhook/route.ts > /tmp/webhook-upstream.ts
+```
+
+Compare com `src/lib/whatsapp/inbound.ts`. O upstream é Meta-only; `inbound.ts` atende os três provedores. **Porte o comportamento, não o código** — copiar trechos Meta-only quebraria WAHA e Uazapi, que é como as três instalações funcionam.
+
+- [ ] **Step 3: Portar os quatro itens**
+
+Preserve o que é do fork: atribuição de marketing (CTWA / site via `[ref:]` / direto), download de mídia da Uazapi via `POST /message/download`, o `site_ref` de primeiro toque, e o despacho por provedor.
+
+- [ ] **Step 4: Rodar os testes até ficarem verdes**
+
+```bash
+npx vitest run src/app/api/whatsapp/webhook
+```
+Expected: 30/30 passando.
+
+- [ ] **Step 5: Confirmar que os outros provedores não quebraram**
+
+```bash
+npx vitest run src/lib/whatsapp/
+```
+Expected: tudo passa (444 testes no último levantamento, mais os que a Task 4 destravar).
+
+- [ ] **Step 6: Marcar como resolvido**
+
+```bash
+git add src/lib/whatsapp/inbound.ts
+```
+
+Sem commit — o merge segue aberto até a Task 8.

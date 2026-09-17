@@ -19,6 +19,12 @@ import { dispatchInboundToFlows } from '@/lib/flows/engine'
 import { dispatchInboundToAiReply } from '@/lib/ai/auto-reply'
 import { dispatchWebhookEvent } from '@/lib/webhooks/deliver'
 import { extractSiteRef } from '@/lib/marketing/site-ref'
+import { reopenClosedConversation } from '@/lib/conversations/reopen'
+import {
+  hasUsableIdentity,
+  identityDisplayName,
+  type WaIdentity,
+} from '@/lib/whatsapp/wa-identity'
 
 // Lazy-initialized to avoid build-time crash when env vars are missing
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -40,6 +46,11 @@ export interface NormalizedInboundMessage {
   contentType: 'text' | 'image' | 'document' | 'audio' | 'video' | 'location' | 'interactive'
   contentText: string | null
   mediaUrl: string | null       // URL já resolvida/proxied, pronta pra gravar
+  // MIME type do anexo, quando o provedor informa (Meta: `getMediaUrl`).
+  // Gravado em `messages.media_type` (migração 047) para que o download
+  // saiba a extensão sem ter que baixar os bytes primeiro. Os provedores
+  // QR não informam — fica null e a coluna segue nula, como antes.
+  mediaType?: string | null
   timestamp: Date
   replyToExternalId: string | null
   interactiveReplyId: string | null
@@ -50,6 +61,18 @@ export interface NormalizedInboundMessage {
   // de origem quando a conversa é criada; ausente/null na esmagadora maioria
   // das mensagens.
   adReferral?: Record<string, unknown> | null
+  // ============================================================
+  // Identidade business-scoped (BSUID) — só a Meta envia (#519).
+  //
+  // Quando o cliente adota um username do WhatsApp, a Meta para de
+  // mandar o telefone: `fromPhone` chega vazio e estes campos são a
+  // única chave do contato. WAHA e Uazapi endereçam só telefone e
+  // deixam os três ausentes, então o caminho deles é idêntico ao de
+  // antes (telefone → findExistingContact).
+  // ============================================================
+  waUserId?: string | null
+  waParentUserId?: string | null
+  waUsername?: string | null
 }
 
 // The happy-path status ladder — pending → sent → delivered → read →
@@ -107,20 +130,37 @@ export function isValidStatusTransition(
  * `timestamp` is the provider's event time, used for the
  * sent_at/delivered_at/read_at mirrors; defaults to now when the
  * provider doesn't supply one.
+ * `failure` is the provider's reason for a failed send (#535). Only
+ * Meta supplies one; the QR providers pass nothing and the error
+ * columns are left untouched, exactly as before. It is never cleared
+ * on a later non-failed status, so the reason survives a replay.
  */
+export interface InboundStatusFailure {
+  code: number
+  title: string
+  details: string | null
+}
+
 export async function applyStatusByExternalId(
   externalId: string,
   status: 'sent' | 'delivered' | 'read' | 'failed',
-  timestamp?: Date
+  timestamp?: Date,
+  failure?: InboundStatusFailure | null
 ): Promise<void> {
   // 1) Mirror onto messages (legacy behavior) — Meta's status values
   //    already match the CHECK constraint on messages.status. No
   //    `.select()`: message_id is NOT unique (migration 009 — Meta ids
   //    repeat across numbers), so this updates 0..N rows and must not
   //    assume a single row.
+  const messageUpdate: Record<string, unknown> = { status: status }
+  if (failure) {
+    messageUpdate.error_code = failure.code
+    messageUpdate.error_title = failure.title
+    messageUpdate.error_details = failure.details
+  }
   const { error: msgErr } = await supabaseAdmin()
     .from('messages')
-    .update({ status: status })
+    .update(messageUpdate)
     .eq('message_id', externalId)
 
   if (msgErr) {
@@ -155,6 +195,14 @@ export async function applyStatusByExternalId(
     if (status === 'sent' && !('sent_at' in update)) update.sent_at = tsIso
     if (status === 'delivered') update.delivered_at = tsIso
     if (status === 'read') update.read_at = tsIso
+    // broadcast_recipients already has a free-text error_message column
+    // (migration 001), so the reason is folded into it rather than
+    // adding three more columns there.
+    if (failure) {
+      update.error_message =
+        `[${failure.code}] ${failure.title}` +
+        (failure.details ? `: ${failure.details}` : '')
+    }
 
     const { error: recUpdateErr } = await supabaseAdmin()
       .from('broadcast_recipients')
@@ -266,31 +314,138 @@ interface ContactOutcome {
   wasCreated: boolean
 }
 
+/**
+ * Look a contact up by BSUID. Exact match on the column backing
+ * migration 048's unique index — no fuzzy matching, because a BSUID is
+ * an opaque identifier with exactly one correct spelling.
+ *
+ * Only the Meta path ever reaches this: WAHA and Uazapi leave
+ * `waUserId` null, so the caller short-circuits straight to the phone
+ * lookup for them.
+ */
+async function findContactByWaUserId(
+  accountId: string,
+  waUserId: string
+): Promise<ContactRow | null> {
+  const { data, error } = await supabaseAdmin()
+    .from('contacts')
+    .select('*')
+    .eq('account_id', accountId)
+    .eq('wa_user_id', waUserId)
+    .maybeSingle()
+
+  if (error) {
+    console.error('[webhook] BSUID contact lookup failed:', error.message)
+    return null
+  }
+  return data ?? null
+}
+
+/**
+ * Fields worth writing back onto a contact we just matched, given what
+ * this delivery told us. Returns null when nothing changed, so the
+ * common case costs no UPDATE — which is what the phone-only providers
+ * (WAHA / Uazapi) see on every message from a known contact.
+ *
+ * The BSUID backfill is the important one: it stamps the id onto a
+ * contact we have only ever known by phone, so the NEXT message from
+ * that person — which may well arrive with no phone number at all —
+ * still resolves to this same row instead of forking a new one.
+ * Likewise a phone backfill upgrades a BSUID-only contact the moment
+ * Meta discloses the number.
+ */
+function contactIdentityPatch(
+  existing: ContactRow,
+  identity: WaIdentity
+): Record<string, unknown> | null {
+  const patch: Record<string, unknown> = {}
+
+  // Only ever from a label the provider actually supplied.
+  // `identityDisplayName` falls back to the phone number / BSUID, which
+  // is the right choice for a brand-new row but would clobber an
+  // agent's hand-edited name on every inbound message from a contact
+  // with no WhatsApp profile name.
+  const name = identity.name || identity.waUsername
+  if (name && name !== existing.name) patch.name = name
+
+  if (identity.waUserId && identity.waUserId !== existing.wa_user_id) {
+    patch.wa_user_id = identity.waUserId
+  }
+  if (
+    identity.waParentUserId &&
+    identity.waParentUserId !== existing.wa_parent_user_id
+  ) {
+    patch.wa_parent_user_id = identity.waParentUserId
+  }
+  if (identity.waUsername && identity.waUsername !== existing.wa_username) {
+    patch.wa_username = identity.waUsername
+  }
+  // Only ever fills a blank. An existing number is left alone — the
+  // send path's variant retry already owns correcting it, and a
+  // provider's formatting differences are not a reason to rewrite it.
+  if (identity.phone && !normalizePhone(existing.phone ?? '')) {
+    patch.phone = identity.phone
+  }
+
+  return Object.keys(patch).length > 0 ? patch : null
+}
+
+/**
+ * Resolve the contact an inbound delivery belongs to, creating it when
+ * we've never seen this person.
+ *
+ * `identity` carries BOTH possible keys. Phone is the only one WAHA and
+ * Uazapi ever fill, so for them this behaves exactly as the phone-only
+ * version did; the BSUID branches are inert.
+ */
 export async function findOrCreateContact(
   accountId: string,
   configOwnerUserId: string,
-  phone: string,
-  name: string | null
+  identity: WaIdentity
 ): Promise<ContactOutcome | null> {
-  // Find an existing contact for this account by phone. The shared
-  // helper pre-filters in SQL by the last-8-digit suffix (so we don't
-  // pull every contact on every inbound message) then applies the
-  // strict `phonesMatch` in JS on the small candidate set. The same
-  // helper backs the manual contact form and CSV import, so all three
-  // paths agree on what "same number" means (issue #212).
-  const existingContact = await findExistingContact(
-    supabaseAdmin(),
-    accountId,
-    phone,
-  )
+  // BSUID first when we have one. It's stable per (user, business
+  // portfolio) and, unlike the phone number, Meta keeps sending it — so
+  // it's the key that survives a customer adopting a username.
+  let existingContact: ContactRow | null = identity.waUserId
+    ? await findContactByWaUserId(accountId, identity.waUserId)
+    : null
+
+  // Fall back to the phone. The shared helper pre-filters in SQL by the
+  // last-8-digit suffix (so we don't pull every contact on every
+  // inbound message) then applies the strict `phonesMatch` in JS on the
+  // small candidate set. The same helper backs the manual contact form
+  // and CSV import, so all three paths agree on what "same number"
+  // means (issue #212). Skipped entirely when there is no phone —
+  // looking '' up is what used to fork a new contact per message.
+  if (!existingContact && identity.phone) {
+    existingContact = await findExistingContact(
+      supabaseAdmin(),
+      accountId,
+      identity.phone,
+    )
+  }
 
   if (existingContact) {
-    // Update name if it changed
-    if (name && name !== existingContact.name) {
-      await supabaseAdmin()
+    const patch = contactIdentityPatch(existingContact, identity)
+    if (patch) {
+      const { data: updated, error: updateError } = await supabaseAdmin()
         .from('contacts')
-        .update({ name, updated_at: new Date().toISOString() })
+        .update({ ...patch, updated_at: new Date().toISOString() })
         .eq('id', existingContact.id)
+        .select()
+        .maybeSingle()
+
+      if (updateError) {
+        // A BSUID backfill can lose a race with a concurrent delivery
+        // that already claimed it for another row. Not fatal — the
+        // message still belongs to the contact we matched.
+        console.error(
+          '[webhook] contact identity backfill failed:',
+          updateError.message
+        )
+      } else if (updated) {
+        existingContact = updated
+      }
     }
     return { contact: existingContact, wasCreated: false }
   }
@@ -299,25 +454,43 @@ export async function findOrCreateContact(
   // user_id is the NOT NULL FK audit column (no inbound message
   // has a single "user who created" it — we attribute to the
   // WhatsApp config owner as a stable default).
+  //
+  // `phone` stays NOT NULL in the schema, so a BSUID-only sender is
+  // stored with '' — which migration 022's partial unique index
+  // tolerates, and migration 048's BSUID index is what keeps them
+  // unique instead.
   const { data: newContact, error: createError } = await supabaseAdmin()
     .from('contacts')
     .insert({
       account_id: accountId,
       user_id: configOwnerUserId,
-      phone,
-      name: name || phone,
+      phone: identity.phone,
+      name: identityDisplayName(identity),
+      wa_user_id: identity.waUserId,
+      wa_parent_user_id: identity.waParentUserId,
+      wa_username: identity.waUsername,
     })
     .select()
     .single()
 
   if (createError) {
     // Lost a race: a concurrent inbound delivery (or another path)
-    // created this contact between our lookup and insert, and the
-    // unique index (migration 022) rejected the duplicate. Re-resolve
-    // the existing row instead of dropping the message.
+    // created this contact between our lookup and insert, and a unique
+    // index (022's phone, or 048's BSUID) rejected the duplicate.
+    // Re-resolve the existing row instead of dropping the message.
     if (isUniqueViolation(createError)) {
-      const raced = await findExistingContact(supabaseAdmin(), accountId, phone)
+      const raced = identity.waUserId
+        ? await findContactByWaUserId(accountId, identity.waUserId)
+        : null
       if (raced) return { contact: raced, wasCreated: false }
+      if (identity.phone) {
+        const racedByPhone = await findExistingContact(
+          supabaseAdmin(),
+          accountId,
+          identity.phone
+        )
+        if (racedByPhone) return { contact: racedByPhone, wasCreated: false }
+      }
     }
     console.error('Error creating contact:', createError)
     return null
@@ -418,8 +591,26 @@ export async function persistInboundMessage(
   // para testes; em produção usa o default de 3s.
   echoDedupeRetryMs = 3000,
 ): Promise<void> {
-  const senderPhone = normalizePhone(normalized.fromPhone)
-  const contactName = normalized.contactName
+  // Identidade do remetente: telefone E/OU BSUID. Os provedores QR
+  // (WAHA / Uazapi) só preenchem o telefone, então para eles isto é
+  // exatamente o que era antes.
+  const identity: WaIdentity = {
+    phone: normalizePhone(normalized.fromPhone),
+    waUserId: normalized.waUserId ?? null,
+    waParentUserId: normalized.waParentUserId ?? null,
+    waUsername: normalized.waUsername ?? null,
+    name: normalized.contactName ?? '',
+  }
+  if (!hasUsableIdentity(identity)) {
+    // Nenhuma das duas chaves. Criar a linha assim mesmo geraria um
+    // contato inalcançável que nunca mais casa com nada — melhor
+    // descartar a entrega com log do que acumular lixo.
+    console.error(
+      '[inbound] message carries neither a phone number nor a BSUID; skipping:',
+      normalized.externalId
+    )
+    return
+  }
 
   // Content arrives pre-parsed by the provider route (Meta:
   // parseMessageContent; WAHA: its own normalizer). `contentType` is
@@ -431,8 +622,7 @@ export async function persistInboundMessage(
   const contactOutcome = await findOrCreateContact(
     accountId,
     configOwnerUserId,
-    senderPhone,
-    contactName
+    identity
   )
   if (!contactOutcome) return
   const contactRecord = contactOutcome.contact
@@ -503,6 +693,7 @@ export async function persistInboundMessage(
       content_type: contentType,
       content_text: contentText,
       media_url: mediaUrl,
+      media_type: normalized.mediaType ?? null,
       message_id: normalized.externalId,
       status: 'sent',
       created_at: normalized.timestamp.toISOString(),
@@ -581,13 +772,35 @@ export async function persistInboundMessage(
   // (see supabase/migrations/001_initial_schema.sql):
   //   conversation_id, sender_type, content_type, content_text,
   //   media_url, template_name, message_id, status, created_at
-  const { error: msgError } = await supabaseAdmin().from('messages').insert({
+  //
+  // Idempotent insert. Every provider retries a delivery it didn't see
+  // acked (Meta on a slow 200 or a transient 5xx; the QR providers on a
+  // reconnect), and each retry replays the exact same provider message
+  // id. The unique index on (conversation_id, message_id) added in
+  // migration 045 makes a replay conflict; `ignoreDuplicates` turns that
+  // into an ON CONFLICT DO NOTHING, and the `.select()` then returns the
+  // inserted row ONLY on a genuine first insert — an empty result means
+  // this delivery was a replay. This is the single idempotency boundary
+  // and it must sit BEFORE the unread bump and all downstream fan-out
+  // below (issue #367).
+  //
+  // An empty-string external id is treated as absent (same as null)
+  // before it ever reaches the unique index: unlike NULL, two empty
+  // strings compare equal, so a blank id would make the first message in
+  // a conversation collide with every later one, get returned as `[]` by
+  // the upsert below, and be discarded as a "duplicate" it never was.
+  const externalIdForInsert = normalized.externalId ? normalized.externalId : null
+  const messageRow = {
     conversation_id: conversation.id,
     sender_type: 'customer',
     content_type: contentType,
     content_text: contentTextToStore,
     media_url: mediaUrl,
-    message_id: normalized.externalId,
+    // MIME type do anexo (migração 047). Era descartado, o que
+    // obrigava o download a adivinhar a extensão só depois de já
+    // ter buscado os bytes. Null para quem não informa.
+    media_type: normalized.mediaType ?? null,
+    message_id: externalIdForInsert,
     status: 'delivered',
     created_at: normalized.timestamp.toISOString(),
     reply_to_message_id: replyToInternalId,
@@ -595,34 +808,108 @@ export async function persistInboundMessage(
     // the column; null for every other content_type so existing inserts
     // behave identically.
     interactive_reply_id: interactiveReplyId,
-  })
+  }
+
+  let insertedRows: { id: string }[] | null = null
+  const { data: upsertRows, error: msgError } = await supabaseAdmin()
+    .from('messages')
+    .upsert(messageRow, {
+      onConflict: 'conversation_id,message_id',
+      ignoreDuplicates: true,
+    })
+    .select('id')
 
   if (msgError) {
-    console.error('Error inserting message:', msgError)
+    // 42P10 = Postgres "invalid ON CONFLICT specification": the unique
+    // index migration 045 adds on (conversation_id, message_id) doesn't
+    // exist yet in this database, so the ON CONFLICT clause itself is
+    // invalid and PostgREST never attempts the write — every inbound
+    // message would otherwise be silently discarded below. Fall back to
+    // a plain insert instead: all three production installations
+    // (Meta, WAHA, Uazapi) depend on this path, and losing deduplication
+    // for a while is far better than losing the message outright.
+    if (msgError.code === '42P10') {
+      console.error(
+        '[inbound] migration 045 unique index missing on messages(conversation_id, message_id) — deduplication INACTIVE, falling back to plain insert:',
+        normalized.externalId
+      )
+      const { data: fallbackRows, error: fallbackError } = await supabaseAdmin()
+        .from('messages')
+        .insert(messageRow)
+        .select('id')
+
+      if (fallbackError) {
+        console.error('Error inserting message (fallback insert):', fallbackError)
+        return
+      }
+      insertedRows = fallbackRows
+    } else {
+      console.error('Error inserting message:', msgError)
+      return
+    }
+  } else {
+    insertedRows = upsertRows
+  }
+
+  // Replayed delivery: the message already exists, so acknowledge it as a
+  // no-op. Returning here is what keeps a retry from double-bumping unread,
+  // re-advancing flows, re-firing automations, re-invoking AI handling, and
+  // re-dispatching public webhooks (issue #367). Never true on the
+  // fallback-insert path above — a plain insert always returns its row.
+  if (!insertedRows || insertedRows.length === 0) {
+    console.info(
+      '[inbound] duplicate inbound message ignored (idempotent replay):',
+      normalized.externalId
+    )
     return
   }
 
-  // Update conversation. The origin fields (site_ref / ad_referral) piggyback
-  // on this same UPDATE — a single write, only when the conversation was just
-  // created and an origin was actually captured; otherwise the update object
-  // is byte-for-byte what it was before this feature.
-  const convUpdate: Record<string, unknown> = {
-    last_message_text: contentTextToStore || `[${contentType}]`,
-    last_message_at: new Date().toISOString(),
-    unread_count: (conversation.unread_count || 0) + 1,
-    updated_at: new Date().toISOString(),
-  }
-  if (capturedSiteRef) convUpdate.site_ref = capturedSiteRef
-  if (capturedAdReferral) convUpdate.ad_referral = capturedAdReferral
-
-  const { error: convError } = await supabaseAdmin()
-    .from('conversations')
-    .update(convUpdate)
-    .eq('id', conversation.id)
+  // Update conversation. The unread bump is done DB-side (migration 045's
+  // bump_conversation_on_inbound) rather than as a read-modify-write of the
+  // snapshot loaded above: two inbound messages for the same conversation
+  // can process concurrently, and computing `snapshot + 1` in the app let
+  // both reads see the same value and write the same increment, losing one
+  // (issue #369). The RPC increments in a single UPDATE and refreshes the
+  // last-message summary in the same statement.
+  const { error: convError } = await supabaseAdmin().rpc(
+    'bump_conversation_on_inbound',
+    {
+      p_conversation_id: conversation.id,
+      p_last_message_text: contentTextToStore || `[${contentType}]`,
+    }
+  )
 
   if (convError) {
     console.error('Error updating conversation:', convError)
   }
+
+  // Origem (site_ref / ad_referral). Antes pegava carona no UPDATE acima;
+  // como o bump virou RPC, vira uma escrita própria — que só acontece na
+  // primeira mensagem de uma conversa recém-criada em que houve captura,
+  // ou seja, praticamente nunca. Nada muda para as demais mensagens.
+  if (capturedSiteRef || capturedAdReferral) {
+    const originUpdate: Record<string, unknown> = {
+      updated_at: new Date().toISOString(),
+    }
+    if (capturedSiteRef) originUpdate.site_ref = capturedSiteRef
+    if (capturedAdReferral) originUpdate.ad_referral = capturedAdReferral
+
+    const { error: originError } = await supabaseAdmin()
+      .from('conversations')
+      .update(originUpdate)
+      .eq('id', conversation.id)
+
+    if (originError) {
+      console.error('Error persisting conversation origin:', originError)
+    }
+  }
+
+  // A customer writing again re-opens the thread (issue #409). Kept as a
+  // separate statement rather than a `status` field on the write above so
+  // it can be gated on the row's CURRENT status in SQL — see the helper
+  // for why that matters. No-op (and no round trip) unless the snapshot
+  // we loaded says the thread was closed.
+  await reopenClosedConversation(supabaseAdmin(), conversation)
 
   // If this contact was a recent broadcast recipient, flag the reply
   // so the broadcast's `replied_count` advances (via the aggregate
@@ -673,8 +960,6 @@ export async function persistInboundMessage(
   // Fire any automations that react to this webhook event. All dispatches
   // run here (not earlier) so the contact, conversation, and inbound
   // message all exist before any step — including send_message — runs.
-  // Fire-and-forget: a slow or failing automation must not block the
-  // webhook's 200 OK response to Meta.
   const inboundText = contentText ?? ''
   const automationTriggers: (
     | 'new_contact_created'
@@ -703,8 +988,14 @@ export async function persistInboundMessage(
   // listens to only one trigger runs only when that trigger matches.
   if (contactOutcome.wasCreated) automationTriggers.unshift('new_contact_created')
   if (isFirstInboundMessage) automationTriggers.unshift('first_inbound_message')
+  // Awaited — not fire-and-forget. Every provider route calls this from
+  // inside `after()`, which only keeps the function alive for promises it
+  // can see, so a detached dispatch can be frozen part-way through: the
+  // log row is inserted, then the steps never run. `runAutomationsForTrigger`
+  // owns its own try/catch and never throws; the `.catch` is belt-and-braces
+  // so one trigger type's failure can't skip the rest of the loop.
   for (const triggerType of automationTriggers) {
-    runAutomationsForTrigger({
+    await runAutomationsForTrigger({
       accountId,
       triggerType,
       contactId: contactRecord.id,

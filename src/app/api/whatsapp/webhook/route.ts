@@ -2,7 +2,15 @@ import { NextResponse, after } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { decrypt, encrypt, isLegacyFormat } from '@/lib/whatsapp/encryption'
 import { getMediaUrl, downloadMedia } from '@/lib/whatsapp/meta-api'
-import { normalizePhone } from '@/lib/whatsapp/phone-utils'
+import { mirrorInboundMedia } from '@/lib/whatsapp/mirror-inbound-media'
+// Contact/conversation resolution and the dedupe helpers live in the
+// shared inbound module below, which the WAHA and Uazapi webhooks reuse;
+// what stays here is the Meta-only unpacking of the sender's identity.
+import {
+  hasUsableIdentity,
+  resolveInboundIdentity,
+  type WaContactPayload,
+} from '@/lib/whatsapp/wa-identity'
 import { verifyMetaWebhookSignature } from '@/lib/whatsapp/webhook-signature'
 import { dispatchWebhookEvent } from '@/lib/webhooks/deliver'
 import {
@@ -39,7 +47,18 @@ function supabaseAdmin() {
 
 interface WhatsAppMessage {
   id: string
-  from: string
+  /**
+   * Sender's phone number. **Optional since Meta's username rollout** —
+   * a sender who has adopted a WhatsApp username and has no recent
+   * interaction history with this business arrives with no phone number
+   * at all, identified only by `from_user_id` (issue #519). See
+   * `@/lib/whatsapp/wa-identity`.
+   */
+  from?: string
+  /** Sender's business-scoped user ID (BSUID). */
+  from_user_id?: string
+  /** Sender's portfolio-level BSUID. */
+  from_parent_user_id?: string
   timestamp: string
   type: string
   text?: { body: string }
@@ -61,6 +80,15 @@ interface WhatsAppMessage {
     button_reply?: { id: string; title: string }
     list_reply?: { id: string; title: string; description?: string }
   }
+  /**
+   * Set when the customer taps a QUICK_REPLY button on a *template*
+   * message — a broadcast, or any template send. Meta uses a different
+   * envelope from `interactive` above: `type: 'button'`, the label in
+   * `button.text`, and the payload configured on the template's button
+   * in `button.payload` (Meta's own template editor doesn't ask for a
+   * payload and mirrors the label into it).
+   */
+  button?: { text?: string; payload?: string }
   /** Present when the customer swipe-replies to one of our messages. */
   context?: { id: string }
   /**
@@ -70,6 +98,15 @@ interface WhatsAppMessage {
    * for origin attribution — never transformed here.
    */
   referral?: Record<string, unknown>
+}
+
+/** One entry of a failed status's `errors` array, as Meta sends it. */
+interface MetaStatusError {
+  code: number
+  title: string
+  message?: string
+  error_data?: { details?: string }
+  href?: string
 }
 
 interface WhatsAppWebhookEntry {
@@ -82,8 +119,11 @@ interface WhatsAppWebhookEntry {
         phone_number_id: string
       }
       contacts?: Array<{
-        profile: { name: string }
-        wa_id: string
+        profile: { name?: string; username?: string }
+        /** Absent for a username-only sender — see WhatsAppMessage.from. */
+        wa_id?: string
+        user_id?: string
+        parent_user_id?: string
       }>
       messages?: WhatsAppMessage[]
       statuses?: Array<{
@@ -91,6 +131,13 @@ interface WhatsAppWebhookEntry {
         status: string
         timestamp: string
         recipient_id: string
+        /**
+         * Only present when `status === 'failed'`. Meta's reason for the
+         * failure — `code` is a stable numeric error code (e.g. 131049),
+         * `title` a short label, `error_data.details` the human-readable
+         * explanation. See #535.
+         */
+        errors?: MetaStatusError[]
       }>
     }
     field: string
@@ -236,9 +283,16 @@ async function processWebhook(body: { entry?: WhatsAppWebhookEntry[] }) {
       // have a different value shape — route them through the
       // dedicated handler. Skip the messaging branches below so we
       // don't try to read message-shaped fields off a template event.
+      // `entry.id` is the WABA id for template events — the handler
+      // needs it to resolve the owning account when the template has
+      // no local row yet (#534).
       if (isTemplateWebhookField(change.field)) {
         await handleTemplateWebhookChange(
-          { field: change.field, value: change.value as unknown },
+          {
+            field: change.field,
+            value: change.value as unknown,
+            wabaId: entry.id,
+          },
           supabaseAdmin(),
         )
         continue
@@ -311,7 +365,11 @@ async function processWebhook(body: { entry?: WhatsAppWebhookEntry[] }) {
           // inserts that need it for NOT NULL FK compliance. Always
           // the admin who saved the WhatsApp config.
           config.user_id,
-          decryptedAccessToken
+          decryptedAccessToken,
+          // Default ON: the column is NOT NULL DEFAULT TRUE, but a row
+          // read before migration 039 lands would have it undefined,
+          // and losing attachments is the failure mode worth avoiding.
+          config.mirror_inbound_media !== false
         )
       }
     }
@@ -323,14 +381,37 @@ async function handleStatusUpdate(status: {
   status: string
   timestamp: string
   recipient_id: string
+  errors?: MetaStatusError[]
 }) {
+  // Meta's reason for a failed send (#535). Only read on `failed`; a
+  // later non-failed status for the same wamid leaves the error
+  // columns alone rather than clearing them, so the reason survives.
+  const failure =
+    status.status === 'failed' && status.errors?.[0]
+      ? {
+          code: status.errors[0].code,
+          title: status.errors[0].title,
+          details: status.errors[0].error_data?.details ?? null,
+        }
+      : null
+
+  if (failure) {
+    console.warn(
+      `WhatsApp message ${status.id} failed: [${failure.code}] ${failure.title}` +
+        (failure.details ? ` — ${failure.details}` : '')
+    )
+  }
+
   // Meta-specific unpacking only — the mirroring onto messages /
   // broadcast_recipients and the message.status_updated fan-out live
-  // in the shared inbound module.
+  // in the shared inbound module, which the WAHA and Uazapi webhooks
+  // reuse. The failure reason rides along as an optional argument:
+  // the QR providers never supply one, so they keep today's behaviour.
   await applyStatusByExternalId(
     status.id,
     status.status as 'sent' | 'delivered' | 'read' | 'failed',
-    new Date(parseInt(status.timestamp) * 1000)
+    new Date(parseInt(status.timestamp) * 1000),
+    failure
   )
 }
 
@@ -395,7 +476,7 @@ async function handleReaction(
 
 async function processMessage(
   message: WhatsAppMessage,
-  contact: { profile: { name: string }; wa_id: string },
+  contact: WaContactPayload | undefined,
   // Tenancy. Resolved from the matched whatsapp_config row; every
   // contact / conversation / message row created downstream is
   // stamped with this so any member of the account can see it.
@@ -404,8 +485,28 @@ async function processMessage(
   // (contacts, conversations). Always the admin who saved the
   // WhatsApp config; the choice is arbitrary post-017 but stable.
   configOwnerUserId: string,
-  accessToken: string
+  accessToken: string,
+  // Per-account opt-out for the inbound-media mirror (migration 039).
+  // See parseMessageContent for what it turns off.
+  mirrorMedia: boolean
 ) {
+  // Phone number OR business-scoped user ID — Meta sends only the latter
+  // for a sender who has adopted a WhatsApp username (#519). Note the
+  // number can arrive on EITHER `messages[].from` or the paired
+  // `contacts[].wa_id`; `resolveInboundIdentity` reads both, so a
+  // delivery carrying it only in `contacts[]` is no longer discarded.
+  const identity = resolveInboundIdentity(message, contact)
+  if (!hasUsableIdentity(identity)) {
+    // Neither key present. Creating a row anyway would mean an
+    // unreachable contact that can never be matched again, so drop the
+    // delivery loudly instead of silently accumulating them.
+    console.error(
+      '[webhook] inbound message carries neither a phone number nor a BSUID; skipping:',
+      message.id
+    )
+    return
+  }
+
   // Reactions short-circuit here — they aren't messages, so they never
   // reach the shared persistence pipeline. We never insert into
   // `messages`, never bump unread_count, never update last_message_text.
@@ -417,8 +518,7 @@ async function processMessage(
     const contactOutcome = await findOrCreateContact(
       accountId,
       configOwnerUserId,
-      normalizePhone(message.from),
-      contact.profile.name
+      identity
     )
     if (!contactOutcome) return
 
@@ -446,12 +546,11 @@ async function processMessage(
 
   // Parse message content based on type
   const { contentText, mediaUrl, mediaType, interactiveReplyId } =
-    await parseMessageContent(message, accessToken)
-
-  // `mediaType` is intentionally unused — the schema has no media_type
-  // column; the MIME type is only used to construct the proxy URL during
-  // parseMessageContent. Silence the unused-var warning:
-  void mediaType
+    await parseMessageContent(
+      message,
+      accessToken,
+      mirrorMedia ? { accountId } : null
+    )
 
   // The messages.content_type CHECK constraint (widened in migration 010
   // to add 'interactive' for button/list taps) allows:
@@ -465,16 +564,21 @@ async function processMessage(
   const contentType = ALLOWED_CONTENT_TYPES.has(message.type)
     ? message.type
     : message.type === 'sticker'
-      ? 'image'   // stickers are images
-      : 'text'    // reaction, unknown → text fallback
+      ? 'image'         // stickers are images
+      : message.type === 'button'
+        ? 'interactive' // template quick-reply tap (issue #478)
+        : 'text'        // reaction, unknown → text fallback
 
   const normalized: NormalizedInboundMessage = {
     externalId: message.id,
-    fromPhone: message.from,
-    contactName: contact.profile.name || null,
+    fromPhone: identity.phone,
+    contactName: identity.name || null,
     contentType: contentType as NormalizedInboundMessage['contentType'],
     contentText,
     mediaUrl,
+    // Meta's MIME type for the attachment (migration 047) — persisted so
+    // the download name is right without re-fetching the bytes.
+    mediaType,
     timestamp: new Date(parseInt(message.timestamp) * 1000),
     replyToExternalId: message.context?.id ?? null,
     interactiveReplyId,
@@ -482,6 +586,10 @@ async function processMessage(
     // Ad click-to-WhatsApp referral, passed through raw for origin capture.
     // Present only on the first message of an ad-sourced conversation.
     adReferral: message.referral ?? null,
+    // Business-scoped identity (#519). Null for every other provider.
+    waUserId: identity.waUserId,
+    waParentUserId: identity.waParentUserId,
+    waUsername: identity.waUsername,
   }
 
   await persistInboundMessage(normalized, accountId, configOwnerUserId)
@@ -489,7 +597,10 @@ async function processMessage(
 
 async function parseMessageContent(
   message: WhatsAppMessage,
-  accessToken: string
+  accessToken: string,
+  // Tenancy + opt-out for the media mirror. Null disables mirroring
+  // entirely, which is what the account-level toggle does.
+  mirror: { accountId: string } | null
 ): Promise<{
   contentText: string | null
   mediaUrl: string | null
@@ -507,11 +618,41 @@ async function parseMessageContent(
   // the args swapped, so every verification hit an invalid Meta URL and
   // fell through to the catch block, leaving mediaUrl as null. That's
   // why images showed up as empty bubbles in the inbox.
+  //
+  // Beyond verifying, this is where inbound media gets COPIED into the
+  // `chat-media` bucket (issue #466). Meta deletes media ~30 days after
+  // receipt, so the `/api/whatsapp/media/<id>` proxy URL we used to
+  // store is a pointer with an expiry date on it — every inbound
+  // attachment silently became "Photo unavailable" a month later.
+  // Mirroring stores a durable public URL instead.
+  //
+  // The mirror is strictly best-effort. `mirrorInboundMedia` swallows
+  // its own failures and returns null, and we fall back to the proxy
+  // URL — a webhook that throws would have Meta retry the delivery and
+  // re-run everything downstream, which is a far worse outcome than an
+  // attachment that expires.
   const verifyAndBuildUrl = async (
-    mediaId: string
+    mediaId: string,
+    fileName?: string | null
   ): Promise<string | null> => {
     try {
-      await getMediaUrl({ mediaId, accessToken })
+      const info = await getMediaUrl({ mediaId, accessToken })
+
+      if (mirror) {
+        const mirrored = await mirrorInboundMedia({
+          storage: supabaseAdmin().storage,
+          accountId: mirror.accountId,
+          mediaId,
+          downloadUrl: info.url,
+          accessToken,
+          mimeType: info.mimeType,
+          fileSize: info.fileSize,
+          fileName,
+          messageTimestamp: message.timestamp,
+        })
+        if (mirrored) return mirrored
+      }
+
       return `/api/whatsapp/media/${mediaId}`
     } catch (error) {
       console.error(
@@ -563,7 +704,13 @@ async function parseMessageContent(
           ...empty,
           contentText:
             message.document.caption || message.document.filename || null,
-          mediaUrl: await verifyAndBuildUrl(message.document.id),
+          // The sender's own filename becomes the mirrored object's
+          // name, so saving the attachment yields `invoice.pdf` even
+          // when a caption displaced the filename in content_text.
+          mediaUrl: await verifyAndBuildUrl(
+            message.document.id,
+            message.document.filename
+          ),
           mediaType: message.document.mime_type,
         }
       }
@@ -624,6 +771,28 @@ async function parseMessageContent(
       return { ...empty, contentText: '[Interactive reply]' }
     }
 
+    case 'button': {
+      // Quick-reply tap on a TEMPLATE message. Meta delivers these under
+      // their own `button` envelope rather than `interactive` above, so
+      // without this case they fell through to `default` and landed in
+      // the inbox as "[Unsupported message type: button]" with a null
+      // interactiveReplyId — which also meant the Flows engine and the
+      // `interactive_reply` automation trigger never saw the tap, so
+      // nothing chained off a broadcast reply (issue #478).
+      //
+      // `payload` is the stable value (the analogue of
+      // `button_reply.id`); `text` is the visible label. Prefer the
+      // payload for routing and the label for display, each falling
+      // back to the other since a template may carry only one.
+      const payload = message.button?.payload || null
+      const label = message.button?.text || null
+      return {
+        ...empty,
+        contentText: label || payload,
+        interactiveReplyId: payload || label,
+      }
+    }
+
     default:
       return {
         ...empty,
@@ -631,3 +800,4 @@ async function parseMessageContent(
       }
   }
 }
+
