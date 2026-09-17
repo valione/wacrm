@@ -9,6 +9,24 @@ Convenção: **minor** (1.1 → 1.2) a cada deploy com ajustes e novidades;
 aparece no rodapé do app; cada versão publicada ganha uma tag git
 (`v1.0.0`, `v1.1.0`, ...).
 
+## Atualização do upstream (2026-09-17)
+
+Incorporado `ArnasDon/wacrm` até `80c3f9a` (169 commits). As migrações `037`–`042`
+do upstream foram renumeradas para `045`–`050`: o fork já usava `037`–`044` com
+conteúdo próprio, e os bancos das três instalações já as tinham registradas. Sem a
+renumeração, o banco trataria as novas como aplicadas e o código quebraria em runtime.
+
+**Antes de publicar em qualquer instalação, aplicar `045`, `047` e `048` no banco dela.**
+O recebimento de mensagens passou a depender do índice único da `045`; há fallback para
+insert simples (com log de erro) se ele faltar, mas a deduplicação fica inativa.
+
+Tradução: o `pt.json` oficial do upstream passou a ser a base, com as 281 chaves
+exclusivas do fork reaplicadas por cima (`scripts/merge-messages.mjs`). O mesmo script
+preenche `es`/`ko` com fallback em inglês (`node scripts/merge-messages.mjs fallback <locale>`).
+
+Comportamento alterado: o nó `set_tag` dos fluxos só dispara automações `tag_added`
+quando a etiqueta é nova para o contato (antes disparava em toda passagem).
+
 ## v1.12.1 — 2026-08-16
 
 Dois botões consertados, sem mudança de comportamento:
