@@ -16,16 +16,42 @@ do upstream foram renumeradas para `045`–`050`: o fork já usava `037`–`044`
 conteúdo próprio, e os bancos das três instalações já as tinham registradas. Sem a
 renumeração, o banco trataria as novas como aplicadas e o código quebraria em runtime.
 
-**Antes de publicar em qualquer instalação, aplicar `045`, `047` e `048` no banco dela.**
-O recebimento de mensagens passou a depender do índice único da `045`; há fallback para
-insert simples (com log de erro) se ele faltar, mas a deduplicação fica inativa.
+**Antes de publicar em qualquer instalação, aplicar as seis migrações `045` a `050`
+no banco dela, nessa ordem — não é opcional, e não é só `045`, `047` e `048`.**
+
+- `045` cria o índice único de `messages(conversation_id, message_id)`. Sem ela, o
+  recebimento cai num fallback de insert simples (com log de erro) e continua
+  funcionando — só a deduplicação fica inativa.
+- `047` adiciona a coluna `messages.media_type`. **Sem ela não há fallback**: o
+  insert de recebimento — inclusive o fallback da `045` acima — falha com
+  `PGRST204`, e **toda mensagem recebida é descartada**, nas três instalações.
+- `048` adiciona as colunas `contacts.wa_*`. **Sem ela não há fallback**: todo
+  contato **novo** é descartado na hora de gravar, e todo envio de fluxo,
+  automação ou IA falha (o `select` que essas rotas fazem em `contacts` exige
+  as colunas). Reações também quebram.
+- `046`/`049` são necessárias para a criação de broadcast pela API v1 (só afeta
+  quem usa templates Meta).
+
+Ou seja: publicar o código antes de aplicar as seis apaga mensagens recebidas
+silenciosamente e derruba todo envio automatizado em contas uazapi/waha — não é
+um problema cosmético de deduplicação.
 
 Tradução: o `pt.json` oficial do upstream passou a ser a base, com as 281 chaves
 exclusivas do fork reaplicadas por cima (`scripts/merge-messages.mjs`). O mesmo script
 preenche `es`/`ko` com fallback em inglês (`node scripts/merge-messages.mjs fallback <locale>`).
 
-Comportamento alterado: o nó `set_tag` dos fluxos só dispara automações `tag_added`
-quando a etiqueta é nova para o contato (antes disparava em toda passagem).
+Comportamento alterado:
+
+- O nó `set_tag` dos fluxos só dispara automações `tag_added` quando a etiqueta é
+  nova para o contato (antes disparava em toda passagem).
+- Marcar uma tag manualmente (formulário de contato, painel do contato, ou API
+  v1) agora também dispara automações `tag_added` — antes só o nó `set_tag` do
+  fluxo fazia isso. Na Display4: um atendente marcando manualmente a etiqueta
+  que alimenta o funil de vendas agora cria um card no pipeline.
+- Um nó `send_buttons` que falha agora encerra a execução do fluxo como
+  `failed`, em vez de deixá-la travada. Em uazapi o nó de interativo hoje
+  sempre lança erro (é a trava de capability), então qualquer fluxo com
+  botões nas instalações atuais vai terminar como `failed` nesse nó.
 
 ## v1.12.1 — 2026-08-16
 

@@ -823,11 +823,13 @@ export async function persistInboundMessage(
     // 42P10 = Postgres "invalid ON CONFLICT specification": the unique
     // index migration 045 adds on (conversation_id, message_id) doesn't
     // exist yet in this database, so the ON CONFLICT clause itself is
-    // invalid and PostgREST never attempts the write — every inbound
-    // message would otherwise be silently discarded below. Fall back to
-    // a plain insert instead: all three production installations
-    // (Meta, WAHA, Uazapi) depend on this path, and losing deduplication
-    // for a while is far better than losing the message outright.
+    // invalid and PostgREST never attempts the write. Fall back to a
+    // plain insert so the message isn't lost. This only covers a missing
+    // 045 — it assumes 047 (messages.media_type) and 048 (contacts.wa_*)
+    // are already applied. It does NOT make deploying out of order safe:
+    // without 047 this same insert fails with PGRST204 instead, and
+    // without 048 every new contact fails separately. All of 045-050
+    // must be applied first; see CHANGELOG.display4.md.
     if (msgError.code === '42P10') {
       console.error(
         '[inbound] migration 045 unique index missing on messages(conversation_id, message_id) — deduplication INACTIVE, falling back to plain insert:',

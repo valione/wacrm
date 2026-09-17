@@ -170,7 +170,7 @@ const BROADCAST = {
   template_language: 'en_US',
 };
 
-const CONFIG = { phone_number_id: 'pn-1', access_token: 'tok' };
+const CONFIG = { phone_number_id: 'pn-1', access_token: 'tok', provider: 'meta' };
 
 function recipient(
   id: string,
@@ -183,6 +183,77 @@ function recipient(
     contact: phone ? { phone } : null,
   };
 }
+
+describe('planBroadcastResume — resume/retry guard (final review, Finding 1)', () => {
+  // Upstream's resume/retry panel and route assume a plain Meta template
+  // broadcast. On this fork, a cron-path broadcast (free-text and/or
+  // scheduled) is already driven by the processor's `claimed_at` loop, and
+  // a non-Meta account has no `sendTemplateMessage`-shaped API to resume
+  // through. The route relies on this guard for its 422 — this is the
+  // "route guard" test the review asked for.
+
+  it('422s a free-text (cron-path) broadcast even though it has pending recipients', async () => {
+    await expect(
+      planBroadcastResume(
+        planDb({
+          broadcast: { ...BROADCAST, content_text: 'Olá {{1}}, promoção hoje!' },
+          config: CONFIG,
+          recipients: [recipient('r1', '+15551234567')],
+        }),
+        'acct-1',
+        'bc-1',
+        'pending',
+      ),
+    ).rejects.toMatchObject({ code: 'unsupported_by_provider', status: 422 });
+  });
+
+  it('422s a scheduled (cron-path) broadcast', async () => {
+    await expect(
+      planBroadcastResume(
+        planDb({
+          broadcast: { ...BROADCAST, scheduled_at: '2026-09-20T12:00:00Z' },
+          config: CONFIG,
+          recipients: [recipient('r1', '+15551234567')],
+        }),
+        'acct-1',
+        'bc-1',
+        'pending',
+      ),
+    ).rejects.toMatchObject({ code: 'unsupported_by_provider', status: 422 });
+  });
+
+  it('422s a non-Meta account (e.g. uazapi) even for a template-shaped broadcast', async () => {
+    await expect(
+      planBroadcastResume(
+        planDb({
+          broadcast: BROADCAST,
+          config: { ...CONFIG, provider: 'uazapi' },
+          recipients: [recipient('r1', '+15551234567')],
+        }),
+        'acct-1',
+        'bc-1',
+        'pending',
+      ),
+    ).rejects.toMatchObject({ code: 'unsupported_by_provider', status: 422 });
+  });
+
+  it('passes the guard for a plain Meta template broadcast', async () => {
+    // Neither content_text nor scheduled_at set, provider is 'meta' — the
+    // only shape this whole module is designed for. Should plan normally,
+    // not throw.
+    const { plan } = await planBroadcastResume(
+      planDb({
+        broadcast: BROADCAST,
+        config: CONFIG,
+        recipients: [recipient('r1', '+15551234567')],
+      }),
+      'acct-1',
+      'bc-1',
+      'pending',
+    );
+    expect(plan.planned).toHaveLength(1);
+  });
+});
 
 describe('planBroadcastResume', () => {
   it('plans the outstanding recipients with their frozen params', async () => {

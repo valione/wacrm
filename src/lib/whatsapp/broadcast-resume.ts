@@ -146,13 +146,47 @@ export async function planBroadcastResume(
 ): Promise<ResumePlan> {
   const { data: broadcast, error: bcError } = await db
     .from('broadcasts')
-    .select('id, template_name, template_language')
+    .select('id, template_name, template_language, content_text, scheduled_at')
     .eq('id', broadcastId)
     .eq('account_id', accountId)
     .maybeSingle();
 
   if (bcError || !broadcast) {
     throw new BroadcastError('not_found', 'Broadcast not found', 404);
+  }
+
+  // Config is loaded here — before any recipient work below — because the
+  // guard right after it needs `provider`, and doing it in one place also
+  // saves the second round trip the old code made further down.
+  const { data: config, error: configError } = await db
+    .from('whatsapp_config')
+    .select('*')
+    .eq('account_id', accountId)
+    .single();
+
+  // Guard (issue found in the final upstream-merge review): this whole
+  // module assumes a plain Meta template broadcast. A cron-path broadcast
+  // (free-text and/or scheduled — `content_text`/`scheduled_at` set) is
+  // already driven by the processor's `claimed_at` loop, so resuming it
+  // here races that loop and, on a non-Meta account, calls
+  // `sendTemplateMessage` with a null template and the wrong token. Reject
+  // before touching recipients or claiming anything.
+  const isCronPathBroadcast =
+    broadcast.content_text != null || broadcast.scheduled_at != null;
+  const isNonMetaProvider = !!config && config.provider !== 'meta';
+  if (isCronPathBroadcast || isNonMetaProvider) {
+    throw new BroadcastError(
+      'unsupported_by_provider',
+      'Resume/retry only supports Meta template broadcasts. This broadcast is on the cron delivery path (free-text and/or scheduled) or the account is not on the Meta provider, so resuming here is not supported.',
+      422
+    );
+  }
+  if (configError || !config) {
+    throw new BroadcastError(
+      'whatsapp_not_configured',
+      'WhatsApp not configured. Please set up your WhatsApp integration first.',
+      400
+    );
   }
 
   const statuses = scopeStatuses(scope);
@@ -201,19 +235,6 @@ export async function planBroadcastResume(
       scope === 'failed'
         ? 'This broadcast has no failed recipients to retry'
         : 'This broadcast has no recipients left to send',
-      400
-    );
-  }
-
-  const { data: config, error: configError } = await db
-    .from('whatsapp_config')
-    .select('*')
-    .eq('account_id', accountId)
-    .single();
-  if (configError || !config) {
-    throw new BroadcastError(
-      'whatsapp_not_configured',
-      'WhatsApp not configured. Please set up your WhatsApp integration first.',
       400
     );
   }

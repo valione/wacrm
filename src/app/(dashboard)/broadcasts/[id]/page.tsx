@@ -624,9 +624,14 @@ export default function BroadcastDetailPage() {
         </Alert>
       )}
 
-      {/* Resume / retry (issue #472). Only rendered when there is
-          actually something outstanding. */}
-      {(pendingCount > 0 || retryableCount > 0) && (
+      {/* Resume / retry (issue #472). Meta-template broadcasts only — a
+          cron-path broadcast (free-text and/or scheduled, uazapi/waha/meta
+          alike) is already being driven by the processor's claimed_at
+          loop, so a "stopped midway" panel here would just be describing
+          its normal in-progress state and inviting a click that races the
+          processor. Only rendered when there is actually something
+          outstanding. */}
+      {!isCronPath && (pendingCount > 0 || retryableCount > 0) && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card p-4">
           <div className="text-sm">
             <p className="font-medium text-foreground">

@@ -132,6 +132,16 @@ export async function POST(
       await releaseBroadcastDelivery(supabaseAdmin(), claimedId).catch(() => {});
     }
     if (error instanceof BroadcastError) {
+      // `unsupported_by_provider` follows the shape neighbouring routes use
+      // for that code (e.g. /api/whatsapp/react) — the slug in `error`,
+      // the human text in `message` — rather than this route's older
+      // generic mapping below.
+      if (error.code === 'unsupported_by_provider') {
+        return NextResponse.json(
+          { error: error.code, message: error.message },
+          { status: error.status }
+        );
+      }
       return NextResponse.json(
         { error: error.message, code: error.code },
         { status: error.status }

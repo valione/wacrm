@@ -586,6 +586,20 @@ git commit -m "docs: registrar a renumeração das migrações no changelog"
 
 **Não comece esta task se a Task 1 não tiver produzido os três dumps.**
 
+> ⚠️ **DEPENDÊNCIA DURA descoberta na revisão final — a ordem aqui não é preferência, é requisito.**
+> Em cada instalação: aplicar **as seis migrações `045` a `050`, em ordem, todas antes**
+> do `git push` daquela instalação. Nunca inverter, e nunca aplicar só um subconjunto.
+>
+> - `045` cria o índice único que o upsert de recebimento usa
+>   (`onConflict: 'conversation_id,message_id'`). Sem ela, há fallback para insert
+>   simples — a deduplicação fica inativa, mas a mensagem não se perde.
+> - `047` (`messages.media_type`) e `048` (`contacts.wa_*`) **não têm fallback
+>   nenhum**: sem `047` o insert de recebimento falha com `PGRST204` e toda
+>   mensagem é descartada; sem `048` todo contato novo é descartado e todo envio
+>   de fluxo/automação/IA falha. É por isso que essas duas são tão obrigatórias
+>   quanto a `045`, mesmo não aparecendo em nenhum log de erro tratado.
+> - `046`/`049` são necessárias para a criação de broadcast pela API v1.
+
 - [ ] **Step 1: Teste ao vivo antes de qualquer publicação**
 
 Subir local com as credenciais da Anhembi e verificar que mensagem real ainda chega e sai. Nenhum teste automático cobre isso, e o merge mexeu no webhook.
@@ -718,3 +732,8 @@ git add src/lib/whatsapp/inbound.ts
 ```
 
 Sem commit — o merge segue aberto até a Task 8.
+
+**Dois achados da revisão da Task 3 que pertencem a esta task** (ambos dormentes hoje, reativados exatamente quando o item 4 acima passar a gravar `wa_user_id`):
+
+5. **`src/lib/whatsapp/send-message.ts:242-254` — falta a guarda de BSUID que o `/react` tem.** Se um contato tiver `wa_user_id` mas nenhum telefone válido numa conta `uazapi`/`waha`, `resolveContactSendTarget` devolve o BSUID e ele é entregue a `provider.sendText({ to })` como se fosse telefone — resultando em 502 com erro opaco do provedor, em vez do 422 `unsupported_by_provider` que `react/route.ts:128-141` devolve na mesma situação. Espelhe a guarda do `/react`.
+6. **`src/app/api/whatsapp/webhook/route.ts:497` — a guarda de descarte lê apenas `message.from`.** O `resolveInboundIdentity` do upstream (`wa-identity.ts:110`) também considera `contact?.wa_id`, então uma entrega da Meta que traga o número apenas na entrada `contacts[]` é descartada embora seja processável. Corrija para considerar as duas origens.
