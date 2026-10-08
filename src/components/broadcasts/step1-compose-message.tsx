@@ -168,7 +168,7 @@ export function Step1ComposeMessage({
           ref={textareaRef}
           value={content}
           onChange={(e) => onContentChange(e.target.value.slice(0, MAX_CHARS))}
-          placeholder={t('placeholder')}
+          placeholder={t.raw('placeholder')}
           rows={6}
           className="min-h-32 resize-y border-border bg-muted text-foreground placeholder:text-muted-foreground"
         />

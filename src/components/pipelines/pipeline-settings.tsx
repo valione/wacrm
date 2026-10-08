@@ -341,7 +341,6 @@ export function PipelineSettings({
                   fundo por vermelho sólido, o texto precisa vir junto —
                   senão fica vermelho sobre vermelho, ilegível. */}
               <Button
-                variant="destructive"
                 onClick={() => setShowDeleteConfirm(true)}
                 className="mr-auto bg-red-600 text-white hover:bg-red-700"
               >
