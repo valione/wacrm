@@ -65,7 +65,7 @@ const EXEMPLO_PADRAO: Record<string, Record<string, string>> = {
  * de ser trocado em vez de nascer uma chave fantasma. O teste
  * "todo caminho trocado existe hoje" avisa quando isso acontecer.
  */
-function gravarCaminho<T extends object>(obj: T, caminho: string, valor: string): T {
+export function gravarCaminho<T extends object>(obj: T, caminho: string, valor: string): T {
   const partes = caminho.split('.')
   const raiz: Record<string, unknown> = { ...obj } as Record<string, unknown>
   let cursor = raiz

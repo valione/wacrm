@@ -8,12 +8,11 @@ import {
 import type { InteractiveMessagePayload } from '@/lib/whatsapp/interactive'
 import { decrypt } from '@/lib/whatsapp/encryption'
 import {
-  sanitizePhoneForMeta,
-  isValidE164,
   phoneVariants,
   isRecipientNotAllowedError,
 } from '@/lib/whatsapp/phone-utils'
 import { resolveProvider, CAPABILITIES } from '@/lib/whatsapp/providers/resolve'
+import { resolveContactSendTarget } from '@/lib/whatsapp/wa-identity'
 import { supabaseAdmin } from './admin-client'
 
 // ------------------------------------------------------------
@@ -30,6 +29,30 @@ import { supabaseAdmin } from './admin-client'
 // brings the flow runner online and wires it up. Shipping it now
 // keeps the foundation PR self-contained and unit-testable.
 // ------------------------------------------------------------
+
+/**
+ * Resolve the account's Meta sending credentials: the phone number id
+ * plus the DECRYPTED access token from `whatsapp_config`. The single
+ * home for that decrypt step — callers outside this file (the AI
+ * auto-reply's typing indicator) reuse it rather than growing a copy.
+ */
+export async function loadAccountMetaCredentials(
+  db: ReturnType<typeof supabaseAdmin>,
+  accountId: string,
+): Promise<{ phoneNumberId: string; accessToken: string }> {
+  const { data: config, error: configErr } = await db
+    .from('whatsapp_config')
+    .select('phone_number_id, access_token')
+    .eq('account_id', accountId)
+    .single()
+  if (configErr || !config) {
+    throw new Error('WhatsApp not configured for this account')
+  }
+  return {
+    phoneNumberId: config.phone_number_id,
+    accessToken: decrypt(config.access_token),
+  }
+}
 
 interface SendTextEngineArgs {
   /** Account-level tenancy key. Drives contact + whatsapp_config
@@ -68,19 +91,27 @@ export async function engineSendText(
 
   const { data: contact, error: contactErr } = await db
     .from('contacts')
-    .select('id, phone')
+    .select('id, phone, wa_user_id')
     .eq('id', args.contactId)
     .eq('account_id', args.accountId)
     .maybeSingle()
-  if (contactErr || !contact?.phone) {
+  if (contactErr || !contact) {
     throw new Error('contact not found for this account')
   }
 
-  const sanitized = sanitizePhoneForMeta(contact.phone)
-  if (!isValidE164(sanitized)) {
-    throw new Error(`contact phone invalid: ${contact.phone}`)
+  // Phone number, or the business-scoped user ID when Meta has never
+  // given us a number for this customer (issue #519).
+  const sendTarget = resolveContactSendTarget(contact)
+  if (!sendTarget) {
+    throw new Error(
+      `contact has no usable WhatsApp address (phone: ${contact.phone || 'none'})`
+    )
   }
+  const sanitized = sendTarget.target
 
+  // Full config row (not loadAccountMetaCredentials) because the send
+  // goes through the provider abstraction: WAHA/Uazapi need
+  // `provider` + `provider_session`, and WAHA has no token to decrypt.
   const { data: config, error: configErr } = await db
     .from('whatsapp_config')
     .select('*')
@@ -101,7 +132,7 @@ export async function engineSendText(
     return r.messageId
   }
 
-  const variants = phoneVariants(sanitized)
+  const variants = sendTarget.isPhone ? phoneVariants(sanitized) : [sanitized]
   let workingPhone = sanitized
   let waMessageId = ''
   let lastError: unknown = null
@@ -119,7 +150,7 @@ export async function engineSendText(
   }
   if (lastError) throw lastError
 
-  if (workingPhone !== sanitized) {
+  if (sendTarget.isPhone && workingPhone !== sanitized) {
     await db.from('contacts').update({ phone: workingPhone }).eq('id', contact.id)
   }
 
@@ -177,19 +208,26 @@ export async function engineSendMedia(
 
   const { data: contact, error: contactErr } = await db
     .from('contacts')
-    .select('id, phone')
+    .select('id, phone, wa_user_id')
     .eq('id', args.contactId)
     .eq('account_id', args.accountId)
     .maybeSingle()
-  if (contactErr || !contact?.phone) {
+  if (contactErr || !contact) {
     throw new Error('contact not found for this account')
   }
 
-  const sanitized = sanitizePhoneForMeta(contact.phone)
-  if (!isValidE164(sanitized)) {
-    throw new Error(`contact phone invalid: ${contact.phone}`)
+  // Phone number, or the business-scoped user ID when Meta has never
+  // given us a number for this customer (issue #519).
+  const sendTarget = resolveContactSendTarget(contact)
+  if (!sendTarget) {
+    throw new Error(
+      `contact has no usable WhatsApp address (phone: ${contact.phone || 'none'})`
+    )
   }
+  const sanitized = sendTarget.target
 
+  // Full config row — see engineSendText: the provider abstraction
+  // needs more than the Meta credentials pair.
   const { data: config, error: configErr } = await db
     .from('whatsapp_config')
     .select('*')
@@ -213,7 +251,7 @@ export async function engineSendMedia(
     return r.messageId
   }
 
-  const variants = phoneVariants(sanitized)
+  const variants = sendTarget.isPhone ? phoneVariants(sanitized) : [sanitized]
   let workingPhone = sanitized
   let waMessageId = ''
   let lastError: unknown = null
@@ -231,7 +269,7 @@ export async function engineSendMedia(
   }
   if (lastError) throw lastError
 
-  if (workingPhone !== sanitized) {
+  if (sendTarget.isPhone && workingPhone !== sanitized) {
     await db.from('contacts').update({ phone: workingPhone }).eq('id', contact.id)
   }
 
@@ -328,19 +366,27 @@ async function sendInteractiveViaMeta(
   // Migration 017 moved both tables to account-scoped tenancy.
   const { data: contact, error: contactErr } = await db
     .from('contacts')
-    .select('id, phone')
+    .select('id, phone, wa_user_id')
     .eq('id', input.contactId)
     .eq('account_id', input.accountId)
     .maybeSingle()
-  if (contactErr || !contact?.phone) {
+  if (contactErr || !contact) {
     throw new Error('contact not found for this account')
   }
 
-  const sanitized = sanitizePhoneForMeta(contact.phone)
-  if (!isValidE164(sanitized)) {
-    throw new Error(`contact phone invalid: ${contact.phone}`)
+  // Phone number, or the business-scoped user ID when Meta has never
+  // given us a number for this customer (issue #519).
+  const sendTarget = resolveContactSendTarget(contact)
+  if (!sendTarget) {
+    throw new Error(
+      `contact has no usable WhatsApp address (phone: ${contact.phone || 'none'})`
+    )
   }
+  const sanitized = sendTarget.target
 
+  // Full config row rather than loadAccountMetaCredentials: the
+  // capability gate below needs `provider`, which that helper doesn't
+  // select.
   const { data: config, error: configErr } = await db
     .from('whatsapp_config')
     .select('*')
@@ -358,12 +404,13 @@ async function sendInteractiveViaMeta(
     throw new Error('nó interativo não suportado em conta WAHA (fallback chega na fase 3)')
   }
 
+  const phoneNumberId = config.phone_number_id
   const accessToken = decrypt(config.access_token)
 
   const attempt = async (phone: string): Promise<string> => {
     if (input.kind === 'buttons') {
       const r = await sendInteractiveButtons({
-        phoneNumberId: config.phone_number_id,
+        phoneNumberId,
         accessToken,
         to: phone,
         bodyText: input.bodyText,
@@ -374,7 +421,7 @@ async function sendInteractiveViaMeta(
       return r.messageId
     }
     const r = await sendInteractiveList({
-      phoneNumberId: config.phone_number_id,
+      phoneNumberId,
       accessToken,
       to: phone,
       bodyText: input.bodyText,
@@ -389,7 +436,7 @@ async function sendInteractiveViaMeta(
   // Same phone-variant retry as automations/meta-send.ts. Numbers
   // registered with/without a trunk 0 + Meta's sandbox quirks all
   // need this to reliably land a message.
-  const variants = phoneVariants(sanitized)
+  const variants = sendTarget.isPhone ? phoneVariants(sanitized) : [sanitized]
   let workingPhone = sanitized
   let waMessageId = ''
   let lastError: unknown = null
@@ -407,7 +454,7 @@ async function sendInteractiveViaMeta(
   }
   if (lastError) throw lastError
 
-  if (workingPhone !== sanitized) {
+  if (sendTarget.isPhone && workingPhone !== sanitized) {
     await db.from('contacts').update({ phone: workingPhone }).eq('id', contact.id)
   }
 

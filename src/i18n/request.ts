@@ -1,4 +1,5 @@
 import { getRequestConfig } from 'next-intl/server';
+import { applyProductLabels } from '@/lib/product-labels';
 import { applyVerticalLabels } from '@/lib/vertical';
 
 export default getRequestConfig(async () => {
@@ -15,6 +16,6 @@ export default getRequestConfig(async () => {
 
   return {
     locale,
-    messages: applyVerticalLabels(messages, locale)
+    messages: applyVerticalLabels(applyProductLabels(messages, locale), locale)
   };
 });

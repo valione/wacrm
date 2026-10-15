@@ -11,6 +11,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { findExistingContact, isUniqueViolation } from '@/lib/contacts/dedupe';
 import { resolveImportTagIds } from '@/lib/contacts/resolve-import-tags';
+import { addContactTagAndDispatch } from '@/lib/contacts/tag-events';
 import { sanitizePhoneForMeta, isValidE164 } from '@/lib/whatsapp/phone-utils';
 
 /** Row select that embeds the contact's tags for serialization. */
@@ -152,9 +153,12 @@ export async function findOrCreateContact(
 
 /**
  * Replace a contact's tags to exactly match `tagNames` (case-
- * insensitive; missing tags are created). A no-op when `tagNames` is
- * undefined — pass `[]` to clear all tags. Reuses `resolveImportTagIds`
- * so API and CSV-import tag handling stay consistent.
+ * insensitive; missing tags are created). Pass `[]` to clear all tags.
+ * Reuses `resolveImportTagIds` so API and CSV-import tag handling stay
+ * consistent — but note its `tagIdByKey` map holds EVERY tag in the
+ * account (it loads them all for case-insensitive matching), so the
+ * desired set must be derived from the *requested* names only, never
+ * from the map's values (#560).
  */
 export async function setContactTags(
   db: SupabaseClient,
@@ -169,7 +173,15 @@ export async function setContactTags(
     tagNames,
     canCreateTags: true,
   });
-  const desired = new Set(tagIdByKey.values());
+  // Same normalization `resolveImportTagIds` applies to `tagNames`
+  // (trim, lowercase, skip empty) so every requested name resolves.
+  const desired = new Set<string>();
+  for (const raw of tagNames) {
+    const key = raw.trim().toLowerCase();
+    if (!key) continue;
+    const tagId = tagIdByKey.get(key);
+    if (tagId) desired.add(tagId);
+  }
 
   // Diff against the current joins rather than delete-all-then-insert:
   // a diff only touches tags that actually change, so a mid-operation
@@ -199,10 +211,19 @@ export async function setContactTags(
     if (error) throw new ContactError('Failed to update contact tags', 500);
   }
   if (toAdd.length > 0) {
-    const { error } = await db
-      .from('contact_tags')
-      .insert(toAdd.map((tag_id) => ({ contact_id: contactId, tag_id })));
-    if (error) throw new ContactError('Failed to update contact tags', 500);
+    for (const tagId of toAdd) {
+      try {
+        await addContactTagAndDispatch({
+          db,
+          accountId,
+          contactId,
+          tagId,
+        });
+      } catch (error) {
+        console.error('[api/v1/contacts] tag add failed:', error);
+        throw new ContactError('Failed to update contact tags', 500);
+      }
+    }
   }
 }
 

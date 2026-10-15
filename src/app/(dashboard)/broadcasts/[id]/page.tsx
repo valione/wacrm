@@ -38,6 +38,7 @@ import {
   PlayCircle,
   Ban,
   ChevronDown,
+  RotateCcw,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -192,6 +193,9 @@ export default function BroadcastDetailPage() {
   const [deleting, setDeleting] = useState(false);
   const [pendingAction, setPendingAction] = useState<BroadcastAction | null>(null);
   const [stalled, setStalled] = useState(false);
+  const [resumingScope, setResumingScope] = useState<
+    'pending' | 'failed' | null
+  >(null);
 
   // Last-seen counters signature + timestamp, for the "cron looks stuck"
   // banner — compared client-side across polls, not persisted.
@@ -348,6 +352,58 @@ export default function BroadcastDetailPage() {
     downloadBlob(`broadcast-${safeName}-${broadcastId.slice(0, 8)}.csv`, csv);
   }
 
+  /**
+   * Hand the leftovers to the server (issue #472).
+   *
+   * The wizard's send loop lives in the tab that started the campaign,
+   * so navigating away strands the rest as 'pending' with the broadcast
+   * stuck 'sending'. This is the recovery, and the same call retries
+   * failed recipients.
+   */
+  async function handleResume(scope: 'pending' | 'failed') {
+    setResumingScope(scope);
+    try {
+      const res = await fetch(`/api/whatsapp/broadcast/${broadcastId}/resume`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scope }),
+      });
+      const payload = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        toast.error(
+          t('toastResumeFailed', {
+            error: payload?.error || `HTTP ${res.status}`,
+          }),
+        );
+        return;
+      }
+
+      toast.success(
+        payload.remaining > 0
+          ? t('toastResumeStartedCapped', {
+              count: payload.resuming,
+              remaining: payload.remaining,
+            })
+          : t('toastResumeStarted', { count: payload.resuming }),
+      );
+      // Delivery runs server-side after the 202, so the counts here are
+      // a snapshot — reload to pick up the first of it.
+      const { broadcast: bc, recipients: recs } = await fetchData();
+      setBroadcast(bc);
+      setRecipients(recs);
+      trackProgress(bc);
+    } catch (err) {
+      toast.error(
+        t('toastResumeFailed', {
+          error: err instanceof Error ? err.message : 'Unknown error',
+        }),
+      );
+    } finally {
+      setResumingScope(null);
+    }
+  }
+
   async function handleDelete() {
     setDeleting(true);
     const supabase = createClient();
@@ -396,6 +452,13 @@ export default function BroadcastDetailPage() {
   const canPause = isCronPath && broadcast.status === 'sending';
   const canResume = isCronPath && broadcast.status === 'paused';
   const canCancel = isCronPath && CRON_ACTIVE_STATUSES.includes(broadcast.status);
+
+  const pendingCount = recipients.filter((r) => r.status === 'pending').length;
+  const retryableCount = recipients.filter((r) => r.status === 'failed').length;
+  // A campaign whose tab went away sits in 'sending' with recipients
+  // still pending and nothing left to move them. Name that state rather
+  // than leaving a permanently pulsing "sending" badge.
+  const isStalled = broadcast.status === 'sending' && pendingCount > 0;
 
   const funnelSteps: FunnelStep[] = [
     { label: t('stats.sent'), value: broadcast.sent_count, color: 'bg-primary' },
@@ -559,6 +622,60 @@ export default function BroadcastDetailPage() {
             <AlertTitle className="mb-0 text-amber-200">{t('controls.stalledBanner')}</AlertTitle>
           </div>
         </Alert>
+      )}
+
+      {/* Resume / retry (issue #472). Meta-template broadcasts only — a
+          cron-path broadcast (free-text and/or scheduled, uazapi/waha/meta
+          alike) is already being driven by the processor's claimed_at
+          loop, so a "stopped midway" panel here would just be describing
+          its normal in-progress state and inviting a click that races the
+          processor. Only rendered when there is actually something
+          outstanding. */}
+      {!isCronPath && (pendingCount > 0 || retryableCount > 0) && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card p-4">
+          <div className="text-sm">
+            <p className="font-medium text-foreground">
+              {isStalled ? t('resumeStalledTitle') : t('resumeTitle')}
+            </p>
+            <p className="mt-0.5 text-muted-foreground">
+              {isStalled
+                ? t('resumeStalledHint', { count: pendingCount })
+                : t('resumeHint', { count: retryableCount })}
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {pendingCount > 0 && (
+              <Button
+                size="sm"
+                onClick={() => handleResume('pending')}
+                disabled={resumingScope !== null}
+              >
+                {resumingScope === 'pending' ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <PlayCircle className="h-3.5 w-3.5" />
+                )}
+                {t('resumePending', { count: pendingCount })}
+              </Button>
+            )}
+            {retryableCount > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleResume('failed')}
+                disabled={resumingScope !== null}
+                className="border-border text-muted-foreground hover:bg-muted"
+              >
+                {resumingScope === 'failed' ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <RotateCcw className="h-3.5 w-3.5" />
+                )}
+                {t('retryFailed', { count: retryableCount })}
+              </Button>
+            )}
+          </div>
+        </div>
       )}
 
       {/* Stats — 6 cards: Total / Sent / Delivered / Read / Replied / Failed */}
