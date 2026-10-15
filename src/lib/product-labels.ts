@@ -8,6 +8,8 @@
  *   "Agentes de IA" do menu.
  * - Exemplos brasileiros nos campos (+55, exemplo.com) no lugar dos
  *   genéricos (+1, example.com).
+ * - Correções de texto que o upstream ainda não fez (o formulário de
+ *   contato exige o telefone, não o nome).
  *
  * Aplicado antes da vertical, que pode sobrepor o que estiver aqui.
  */
@@ -34,6 +36,8 @@ const PRODUTO_PT: Record<string, string> = {
   'Broadcasts.wizard.personalize.imageUrlPlaceholder': 'https://exemplo.com/imagem.jpg',
   'Settings.templates.urlPlaceholder': 'https://exemplo.com/caminho ou com sufixo {{1}}',
   'Settings.templates.phonePlaceholder': '+5511912345678',
+
+  'Contacts.form.addDesc': 'Crie um novo contato. O telefone é obrigatório.',
 }
 
 const TABELAS: Record<string, Record<string, string>> = { pt: PRODUTO_PT }
