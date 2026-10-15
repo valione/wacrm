@@ -12,6 +12,12 @@ LAST="${3:?informe a última migração (ex.: 050)}"
 PSQL="${PSQL:-/opt/homebrew/opt/libpq/bin/psql}"
 DIR="$(cd "$(dirname "$0")/../supabase/migrations" && pwd)"
 
+# Instalações migradas pelo SQL Editor nunca ganharam a tabela de controle
+# da CLI do Supabase — cria no mesmo formato para poder registrar.
+"$PSQL" "$URI" -q -v ON_ERROR_STOP=1 \
+  -c "CREATE SCHEMA IF NOT EXISTS supabase_migrations" \
+  -c "CREATE TABLE IF NOT EXISTS supabase_migrations.schema_migrations (version text PRIMARY KEY, statements text[], name text)"
+
 for f in "$DIR"/*.sql; do
   name="$(basename "$f" .sql)"
   version="${name%%_*}"

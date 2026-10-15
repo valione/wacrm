@@ -53,6 +53,23 @@ Comportamento alterado:
   sempre lança erro (é a trava de capability), então qualquer fluxo com
   botões nas instalações atuais vai terminar como `failed` nesse nó.
 
+## v1.13 — 2026-10-15
+
+Atualização do projeto-base (detalhes na seção "Atualização do upstream" acima).
+O que muda para quem usa:
+
+- **Tradução revisada** pelo projeto-base: textos com só a primeira letra
+  maiúscula ("Adicionar contato"), e "Transmissões" passa a se chamar
+  **"Disparos"**. "Atendente" e os exemplos brasileiros nos campos foram
+  mantidos.
+- **Marcar uma tag à mão agora dispara as automações de "tag adicionada"**
+  — marcar a tag do funil cria o card, como já acontecia pelas automações.
+- Mídia recebida passa a ser guardada no CRM (fotos, vídeos e áudios não
+  dependem mais do link temporário do WhatsApp) e aceita GIF, vídeo do
+  iPhone e áudio Opus.
+- Mensagens repetidas pelo WhatsApp não duplicam mais na conversa.
+- Novo menu **Agentes de IA** e visualizador de mídia em tela cheia.
+
 ## v1.12.1 — 2026-08-16
 
 Dois botões consertados, sem mudança de comportamento:
