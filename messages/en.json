@@ -2337,5 +2337,11 @@
       "noSiteConversations": "No conversations with a site marker in the period.",
       "scopeNote": "Site-traffic campaigns (without \"Click to WhatsApp\") show spend but no attributed conversations — attribution only covers ads that open WhatsApp and the site's [ref:] marker."
     }
+  },
+  "PipelineFilter": {
+    "pipeline": "Pipeline",
+    "allPipelines": "All pipelines",
+    "stage": "Stage",
+    "allStages": "All stages"
   }
 }
