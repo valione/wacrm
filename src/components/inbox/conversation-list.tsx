@@ -22,6 +22,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { PipelineFilter, type PipelineFilterValue } from "./pipeline-filter";
+import { useContactStages, type StageBadge } from "./use-contact-stages";
+import { sortByRecent } from "@/lib/inbox/list-view";
 
 interface ConversationListProps {
   activeConversationId: string | null;
@@ -44,11 +46,6 @@ interface ConversationListProps {
   onNewConversation?: () => void;
 }
 
-const STATUS_COLORS: Record<ConversationStatus, string> = {
-  open: "bg-primary",
-  pending: "bg-amber-500",
-  closed: "bg-muted-foreground",
-};
 
 
 
@@ -82,6 +79,7 @@ export function ConversationList({
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const [selectedCompany, setSelectedCompany] = useState<string | null>(null);
   const [pipelineFilter, setPipelineFilter] = useState<PipelineFilterValue | null>(null);
+  const contactStages = useContactStages(resyncToken);
 
   // Keep the latest callback in a ref so the fetch effect below can
   // have a stable, empty-dep identity. Previously the fetch useCallback
@@ -169,7 +167,7 @@ export function ConversationList({
   }, [tags]);
 
   const filtered = useMemo(() => {
-    let result = conversations;
+    let result = sortByRecent(conversations);
 
     if (filter === "unread") {
       result = result.filter((c) => c.unread_count > 0);
@@ -234,6 +232,10 @@ export function ConversationList({
   );
 
   const activeFilter = FILTER_OPTIONS.find((o) => o.value === filter);
+  const unreadCount = useMemo(
+    () => conversations.filter((c) => c.unread_count > 0).length,
+    [conversations]
+  );
 
   return (
     // w-full on mobile so the list occupies the whole viewport when it's
@@ -381,6 +383,24 @@ export function ConversationList({
           )}
 
           <PipelineFilter value={pipelineFilter} onChange={setPipelineFilter} />
+
+          {/* Atalho visível para "Não lidas", como no WhatsApp — a opção
+              também segue no menu de status. */}
+          <button
+            type="button"
+            onClick={() => setFilter((f) => (f === "unread" ? "all" : "unread"))}
+            className={cn(
+              "inline-flex h-7 items-center gap-1 rounded-full px-2.5 text-xs",
+              filter === "unread"
+                ? "bg-primary text-primary-foreground"
+                : "bg-muted text-muted-foreground hover:text-foreground"
+            )}
+          >
+            {t("filterUnread")}
+            {unreadCount > 0 && filter !== "unread" && (
+              <span className="text-[10px] font-bold text-primary">{unreadCount}</span>
+            )}
+          </button>
         </div>
 
         {hasContactFilters && (
@@ -453,6 +473,7 @@ export function ConversationList({
                 conversation={conv}
                 isActive={conv.id === activeConversationId}
                 onSelect={handleSelect}
+                stage={contactStages.get(conv.contact_id)}
                 t={t}
               />
             ))}
@@ -474,8 +495,10 @@ function ConversationItem({
   conversation,
   isActive,
   onSelect,
+  stage,
   t,
-}: ConversationItemProps) {
+}: ConversationItemProps & { stage?: StageBadge }) {
+  const unread = conversation.unread_count > 0;
   const contact = conversation.contact;
   const displayName = contact?.name || contact?.phone || t("unknown");
   const initials = displayName.charAt(0).toUpperCase();
@@ -514,30 +537,45 @@ function ConversationItem({
       {/* Content */}
       <div className="min-w-0 flex-1">
         <div className="flex items-center justify-between gap-2">
-          <span className="truncate text-sm font-medium text-foreground">
+          <span
+            className={cn(
+              "truncate text-sm text-foreground",
+              unread ? "font-semibold" : "font-medium"
+            )}
+          >
             {displayName}
           </span>
-          <span className="shrink-0 text-[10px] text-muted-foreground">{timeAgo}</span>
+          <span
+            className={cn(
+              "shrink-0 text-[10px]",
+              unread ? "font-semibold text-primary" : "text-muted-foreground"
+            )}
+          >
+            {timeAgo}
+          </span>
         </div>
         <div className="mt-0.5 flex items-center justify-between gap-2">
           <p className="truncate text-xs text-muted-foreground">
             {conversation.last_message_text || t("noMessagesYet")}
           </p>
           <div className="flex shrink-0 items-center gap-1.5">
-            {conversation.unread_count > 0 && (
+            {unread && (
               <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-bold text-primary-foreground">
                 {conversation.unread_count}
               </span>
             )}
-            <span
-              className={cn(
-                "h-2 w-2 rounded-full",
-                STATUS_COLORS[conversation.status]
-              )}
-              title={conversation.status}
-            />
           </div>
         </div>
+        {/* Fase do negócio do contato (no lugar da bolinha de status). */}
+        {stage && (
+          <span
+            className="mt-1 inline-flex max-w-full items-center gap-1 rounded-full border px-1.5 py-px text-[10px] text-foreground"
+            style={{ borderColor: stage.color, backgroundColor: `color-mix(in srgb, ${stage.color} 15%, transparent)` }}
+          >
+            <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: stage.color }} />
+            <span className="truncate">{stage.name}</span>
+          </span>
+        )}
       </div>
     </button>
   );
