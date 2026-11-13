@@ -29,6 +29,19 @@ describe('uazapi-api', () => {
     expect(uazapiEnabled()).toBe(false)
   })
 
+  it('uazapiSendPresence faz POST /message/presence com composing e delay', async () => {
+    const mock = fetch as ReturnType<typeof vi.fn>
+    mock.mockResolvedValue(new Response('{}', { status: 200 }))
+    const { uazapiSendPresence } = await import('./uazapi-api')
+    await uazapiSendPresence({ token: 'tok', number: '5511999999999', delayMs: 25000 })
+    const [url, init] = mock.mock.calls[0]
+    expect(url).toBe('http://uazapi.local:8080/message/presence')
+    expect((init.headers as Record<string, string>).token).toBe('tok')
+    expect(JSON.parse(init.body as string)).toEqual({
+      number: '5511999999999', presence: 'composing', delay: 25000,
+    })
+  })
+
   it('createInstance faz POST /instance/create com header admintoken e retorna token+id', async () => {
     const mock = fetch as ReturnType<typeof vi.fn>
     mock.mockResolvedValue(new Response(

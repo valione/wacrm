@@ -12,6 +12,7 @@ import {
   loadAccountMetaCredentials,
 } from '@/lib/flows/meta-send'
 import { sendTypingIndicator } from '@/lib/whatsapp/meta-api'
+import { showUazapiTyping } from '@/lib/whatsapp/uazapi-typing'
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit'
 
 interface DispatchArgs {
@@ -119,7 +120,7 @@ export async function dispatchInboundToAiReply(
     // nothing to undo on the handoff / no-text path. Strictly
     // best-effort: a failed indicator must never cost us the reply.
     if (inboundMessageId) {
-      await showTypingIndicator(db, accountId, inboundMessageId)
+      await showTypingIndicator(db, accountId, contactId, inboundMessageId)
     }
 
     // Ground the reply in the account's knowledge base (best-effort).
@@ -224,9 +225,11 @@ export async function dispatchInboundToAiReply(
 async function showTypingIndicator(
   db: ReturnType<typeof supabaseAdmin>,
   accountId: string,
+  contactId: string,
   inboundMessageId: string,
 ): Promise<void> {
   try {
+    if (await showUazapiTyping(db, accountId, contactId)) return
     const { phoneNumberId, accessToken } = await loadAccountMetaCredentials(
       db,
       accountId,
