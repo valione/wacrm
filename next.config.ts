@@ -70,6 +70,16 @@ const nextConfig: NextConfig = {
   output: "standalone",
 
   /**
+   * Workers do build. O Next abre um por CPU que enxerga (63 na
+   * Hostinger), e o plano tem limite de threads: com builds simultâneos
+   * os workers morrem com "OS can't spawn worker thread" (os error 11)
+   * e o build cai com SIGABRT. 4 dá conta; NEXT_BUILD_CPUS sobrepõe.
+   */
+  experimental: {
+    cpus: Number(process.env.NEXT_BUILD_CPUS) || 4,
+  },
+
+  /**
    * Cross-origin dev access (Next.js 16).
    *
    * Next 16 blocks requests to dev-only resources (`/_next/*` internals,
