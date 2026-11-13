@@ -1022,6 +1022,7 @@ export async function persistInboundMessage(
       conversationId: conversation.id,
       contactId: contactRecord.id,
       configOwnerUserId,
+      inboundMessageId: normalized.externalId || undefined,
     })
   }
 
