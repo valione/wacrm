@@ -10,6 +10,7 @@ const h = vi.hoisted(() => ({
   engineSendText: vi.fn(),
   loadAccountMetaCredentials: vi.fn(),
   sendTypingIndicator: vi.fn(),
+  showUazapiTyping: vi.fn(),
   state: {
     conv: null as Record<string, unknown> | null,
     autoResponders: [] as { id: string }[],
@@ -29,6 +30,9 @@ vi.mock('@/lib/flows/meta-send', () => ({
 }))
 vi.mock('@/lib/whatsapp/meta-api', () => ({
   sendTypingIndicator: h.sendTypingIndicator,
+}))
+vi.mock('@/lib/whatsapp/uazapi-typing', () => ({
+  showUazapiTyping: h.showUazapiTyping,
 }))
 vi.mock('./admin-client', () => ({
   supabaseAdmin: () => ({
@@ -110,6 +114,7 @@ beforeEach(() => {
     accessToken: 'tok',
   })
   h.sendTypingIndicator.mockResolvedValue(undefined)
+  h.showUazapiTyping.mockResolvedValue(false)
 })
 
 describe('dispatchInboundToAiReply — eligibility gates', () => {
@@ -221,6 +226,14 @@ describe('dispatchInboundToAiReply — typing indicator (#527)', () => {
     const typingOrder = h.sendTypingIndicator.mock.invocationCallOrder[0]
     const llmOrder = h.generateReply.mock.invocationCallOrder[0]
     expect(typingOrder).toBeLessThan(llmOrder)
+    expect(h.engineSendText).toHaveBeenCalledTimes(1)
+  })
+
+  it('conta Uazapi: digitando pela Uazapi, sem chamar a Meta', async () => {
+    h.showUazapiTyping.mockResolvedValue(true)
+    await dispatchInboundToAiReply(ARGS)
+    expect(h.showUazapiTyping).toHaveBeenCalledWith(expect.anything(), 'acct-1', 'contact-1')
+    expect(h.sendTypingIndicator).not.toHaveBeenCalled()
     expect(h.engineSendText).toHaveBeenCalledTimes(1)
   })
 

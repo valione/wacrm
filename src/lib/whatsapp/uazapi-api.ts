@@ -166,6 +166,23 @@ export async function uazapiSendText(args: {
   return { messageId: data.messageid }
 }
 
+/**
+ * Mostra "digitando…" para o contato por `delayMs` (a Uazapi limita a
+ * 5 min). Some antes se a nossa mensagem chegar.
+ */
+export async function uazapiSendPresence(args: {
+  token: string; number: string; delayMs: number
+}): Promise<void> {
+  await uazapiFetch(
+    '/message/presence',
+    {
+      method: 'POST',
+      body: JSON.stringify({ number: args.number, presence: 'composing', delay: args.delayMs }),
+    },
+    { token: args.token },
+  )
+}
+
 const UAZAPI_MEDIA_TYPE = {
   image: 'image',
   video: 'video',

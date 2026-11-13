@@ -2337,5 +2337,11 @@
       "noSiteConversations": "Nenhuma conversa com marcador do site no período.",
       "scopeNote": "Campanhas de tráfego para o site (sem \"Clique para WhatsApp\") aparecem com investimento, mas sem conversas atribuídas — a atribuição cobre apenas anúncios que abrem o WhatsApp e o marcador [ref:] do site."
     }
+  },
+  "PipelineFilter": {
+    "pipeline": "Pipeline",
+    "allPipelines": "Todos os pipelines",
+    "stage": "Fase",
+    "allStages": "Todas as fases"
   }
 }
