@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
-import type { Pipeline, PipelineStage, Deal } from "@/types";
+import type { Pipeline, PipelineStage, Deal, Tag } from "@/types";
+import { filterDealsByTags } from "@/lib/pipelines/tag-filter";
 import { PipelineBoard } from "@/components/pipelines/pipeline-board";
 import { PipelineSettings } from "@/components/pipelines/pipeline-settings";
 import { DealForm } from "@/components/pipelines/deal-form";
@@ -18,13 +19,14 @@ import {
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuCheckboxItem,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { GitBranch, Plus, ChevronDown, Settings } from "lucide-react";
+import { GitBranch, Plus, ChevronDown, Settings, Tag as TagIcon, X } from "lucide-react";
 import { toast } from "sonner";
 import { useCan } from "@/hooks/use-can";
 import { useAuth } from "@/hooks/use-auth";
@@ -57,6 +59,8 @@ export default function PipelinesPage() {
   const [stages, setStages] = useState<PipelineStage[]>([]);
   const [deals, setDeals] = useState<Deal[]>([]);
   const [loading, setLoading] = useState(true);
+  const [tags, setTags] = useState<Tag[]>([]);
+  const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
 
   // Dialog / sheet state
   const [newPipelineOpen, setNewPipelineOpen] = useState(false);
@@ -101,7 +105,9 @@ export default function PipelinesPage() {
     async (pipelineId: string) => {
       const { data } = await supabase
         .from("deals")
-        .select("*, contact:contacts(*), assignee:profiles!deals_assigned_to_fkey(*)")
+        .select(
+          "*, contact:contacts(*, contact_tags(tag_id)), assignee:profiles!deals_assigned_to_fkey(*)",
+        )
         .eq("pipeline_id", pipelineId)
         .order("created_at", { ascending: false });
       return (data ?? []) as Deal[];
@@ -139,6 +145,31 @@ export default function PipelinesPage() {
 
     return pipeline as Pipeline;
   }, [supabase, accountId]);
+
+  // Tags da conta, para o filtro do quadro.
+  useEffect(() => {
+    let cancelled = false;
+    supabase
+      .from("tags")
+      .select("*")
+      .order("name")
+      .then(({ data }) => {
+        if (!cancelled) setTags((data ?? []) as Tag[]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [supabase]);
+
+  const visibleDeals = useMemo(
+    () => filterDealsByTags(deals, selectedTagIds),
+    [deals, selectedTagIds],
+  );
+
+  const toggleTag = (id: string) =>
+    setSelectedTagIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
 
   // Initial load + seed-if-empty
   useEffect(() => {
@@ -317,7 +348,7 @@ export default function PipelinesPage() {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           {/* Pipeline selector dropdown */}
           <DropdownMenu>
             <DropdownMenuTrigger
@@ -364,6 +395,57 @@ export default function PipelinesPage() {
               )}
             </DropdownMenuContent>
           </DropdownMenu>
+
+          {tags.length > 0 && (
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                className={`inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm hover:bg-muted transition-colors data-[popup-open]:bg-muted ${
+                  selectedTagIds.length > 0 ? "text-primary" : "text-foreground"
+                }`}
+              >
+                <TagIcon className="h-4 w-4" />
+                {t("tags")}
+                {selectedTagIds.length > 0 && (
+                  <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-bold text-primary-foreground">
+                    {selectedTagIds.length}
+                  </span>
+                )}
+                <ChevronDown className="h-4 w-4 text-muted-foreground" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="start"
+                className="max-h-72 w-60 border-border bg-popover"
+              >
+                {tags.map((tag) => (
+                  <DropdownMenuCheckboxItem
+                    key={tag.id}
+                    checked={selectedTagIds.includes(tag.id)}
+                    onCheckedChange={() => toggleTag(tag.id)}
+                    className="text-sm text-popover-foreground"
+                  >
+                    <span className="flex items-center gap-2">
+                      <span
+                        className="h-2 w-2 shrink-0 rounded-full"
+                        style={{ backgroundColor: tag.color }}
+                      />
+                      <span className="truncate">{tag.name}</span>
+                    </span>
+                  </DropdownMenuCheckboxItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+
+          {selectedTagIds.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setSelectedTagIds([])}
+              className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+            >
+              <X className="h-3 w-3" />
+              {t("clearTags", { shown: visibleDeals.length, total: deals.length })}
+            </button>
+          )}
         </div>
 
         <div className="flex items-center gap-2">
@@ -412,10 +494,10 @@ export default function PipelinesPage() {
         </div>
       ) : (
         <>
-          <PipelineAnalytics stages={stages} deals={deals} />
+          <PipelineAnalytics stages={stages} deals={visibleDeals} />
           <PipelineBoard
             stages={stages}
-            deals={deals}
+            deals={visibleDeals}
             onDealMoved={handleDealMoved}
             onAddDeal={handleAddDeal}
             onEditDeal={handleEditDeal}
