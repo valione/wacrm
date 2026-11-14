@@ -589,7 +589,9 @@
       "toastFailedMoveDeal": "Error al mover el negocio",
       "toastFailedCreatePipeline": "Error al crear el pipeline",
       "toastPipelineCreated": "Pipeline creado",
-      "toastNotLinkedToAccount": "Tu perfil no está vinculado a una cuenta."
+      "toastNotLinkedToAccount": "Tu perfil no está vinculado a una cuenta.",
+      "tags": "Etiquetas",
+      "clearTags": "Quitar etiquetas ({shown} de {total})"
     },
     "board": {
       "dropDealHere": "Suelta un negocio aquí",
